@@ -1,3 +1,4 @@
+import { WARSH_PREVIEW_NOTICE } from '../data/qiraatData';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Award,
@@ -110,7 +111,7 @@ export const QiraatExplorerView: React.FC<QiraatExplorerViewProps> = ({
   const applyGlobalRiwayah = (id: RiwayahId) => {
     onSetGlobalRiwayah(id);
     const label = RIWAYAH_PROFILES[id].name;
-    setRiwayahToast(`Global Muṣḥaf Riwāyah switched to ${label}.`);
+    setRiwayahToast(`Reader text preview switched to ${label}. Reader audio is unchanged.`);
     window.setTimeout(() => setRiwayahToast(null), 3500);
   };
 
@@ -158,9 +159,13 @@ export const QiraatExplorerView: React.FC<QiraatExplorerViewProps> = ({
         {/* Active Global Riwāyah Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#D97706]/12 border border-[#D97706]/25 text-xs font-bold text-[#904D00] dark:bg-amber-400/15 dark:text-amber-300">
           <Compass className="w-3.5 h-3.5" />
-          <span>Active Muṣḥaf: {RIWAYAH_PROFILES[activeRiwayah].name}</span>
+          <span>Text preview: {RIWAYAH_PROFILES[activeRiwayah].name}</span>
         </div>
       </div>
+
+      <p className="text-xs leading-relaxed text-[#404944] dark:text-emerald-200/80">
+        {WARSH_PREVIEW_NOTICE}
+      </p>
 
       {riwayahToast && (
         <div className="rounded-xl border border-emerald-600/25 bg-emerald-500/10 px-4 py-2.5 text-xs font-medium text-[#064E3B] dark:text-emerald-200 flex items-center gap-2">
@@ -258,7 +263,7 @@ export const QiraatExplorerView: React.FC<QiraatExplorerViewProps> = ({
                       }`}
                     >
                       {isSelected && <Check className="w-3.5 h-3.5" />}
-                      <span>{isSelected ? 'Global Default' : 'Set Global'}</span>
+                      <span>{isSelected ? 'Preview Selected' : 'Use Text Preview'}</span>
                     </button>
                   </div>
 

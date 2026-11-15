@@ -1,3 +1,4 @@
+import { WARSH_PREVIEW_NOTICE } from '../data/qiraatData';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Award,
@@ -962,13 +963,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-3">
             <div className="space-y-2">
               <span className="block text-xs font-semibold text-[#404944] dark:text-emerald-200/80">
-                Canonical Riwāyah Transmission
+                Reader Text Preview
               </span>
               <div className="grid grid-cols-2 gap-2">
                 {(
                   [
                     { id: 'hafs', title: "Ḥafṣ 'an 'Āṣim", sub: 'Kūfah · Standard Worldwide' },
-                    { id: 'warsh', title: "Warsh 'an Nāfi'", sub: 'Madīnah · Maghrib Muṣḥaf' },
+                    { id: 'warsh', title: "Warsh 'an Nāfi'", sub: 'Limited preview · 2 verses' },
                   ] as const
                 ).map((r) => {
                   const selected = (settings.riwayah ?? 'hafs') === r.id;
@@ -997,6 +998,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   );
                 })}
               </div>
+
+              <p className="text-xs leading-relaxed text-[#404944] dark:text-emerald-200/80">{WARSH_PREVIEW_NOTICE}</p>
 
               <button
                 type="button"
@@ -1032,7 +1035,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Qari / Reciter Voice
               </span>
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#064E3B]/8 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-200">
-                Riwāyah: {settings.riwayah === 'warsh' ? "Warsh 'an Nāfi'" : "Ḥafṣ 'an 'Āṣim"}
+                Text preview: {settings.riwayah === 'warsh' ? "Warsh 'an Nāfi'" : "Ḥafṣ 'an 'Āṣim"}
               </span>
             </div>
             <div className="space-y-1.5">

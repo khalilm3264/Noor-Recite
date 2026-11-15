@@ -344,7 +344,7 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
               className="ml-1 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#064E3B]/8 hover:bg-[#064E3B]/15 text-[#064E3B] dark:bg-emerald-400/15 dark:hover:bg-emerald-400/25 dark:text-emerald-200 text-[11px] font-semibold transition-colors"
             >
               <span>
-                Riwāyah: {settings.riwayah === 'warsh' ? "Warsh 'an Nāfi'" : "Ḥafṣ 'an 'Āṣim"}
+                Text preview: {settings.riwayah === 'warsh' ? "Warsh 'an Nāfi'" : "Ḥafṣ 'an 'Āṣim"}
                 {settings.maghrebiOrthography ? ' · Maghrebi' : ''}
               </span>
             </button>
