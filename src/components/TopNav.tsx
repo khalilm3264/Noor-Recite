@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Compass, Bookmark, Sparkles, SlidersHorizontal, Sun, Moon, HeartHandshake, MoonStar, ScrollText, Award } from 'lucide-react';
+import { BookOpen, Compass, Bookmark, Sparkles, SlidersHorizontal, Sun, Moon, HeartHandshake, MoonStar, ScrollText, Award, HardDrive } from 'lucide-react';
 import { AppScreen } from '../types/quran';
 import { RubElHizbBadge } from './RubElHizbIcon';
 
@@ -10,6 +10,7 @@ interface TopNavProps {
   onToggleDarkMode: () => void;
   onOpenSettings: () => void;
   bookmarkCount: number;
+  isDriveConnected?: boolean;
 }
 
 const NAV_ITEMS: {
@@ -35,6 +36,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onToggleDarkMode,
   onOpenSettings,
   bookmarkCount,
+  isDriveConnected = false,
 }) => {
   return (
     <header className="shrink-0 relative z-30 h-13 sm:h-14 [@media(max-height:540px)]:h-11 border-b border-[#064E3B]/10 dark:border-emerald-300/12 bg-[#FBFBFA]/95 dark:bg-[#041D17]/95 backdrop-blur-md">
@@ -87,8 +89,28 @@ export const TopNav: React.FC<TopNavProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Primary Action + Theme Switch */}
+        {/* Zone 3: Drive Sync + Theme Switch + Preferences */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onSelectScreen('drive')}
+            aria-label="Google Drive Study Hub"
+            title={isDriveConnected ? 'Google Drive Connected' : 'Google Drive Study Hub'}
+            className={`relative min-h-[36px] sm:min-h-[38px] px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+              activeScreen === 'drive'
+                ? 'bg-[#064E3B]/12 text-[#064E3B] dark:bg-emerald-400/20 dark:text-amber-300 border border-[#064E3B]/20 dark:border-emerald-300/30'
+                : 'text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200 dark:hover:text-amber-300 dark:hover:bg-emerald-400/10'
+            }`}
+          >
+            <HardDrive className="w-4 h-4 shrink-0" />
+            <span className="hidden lg:inline">Drive</span>
+            {isDriveConnected && (
+              <span
+                className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0"
+                aria-hidden="true"
+              />
+            )}
+          </button>
           <button
             type="button"
             onClick={onToggleDarkMode}

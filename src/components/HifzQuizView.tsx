@@ -32,11 +32,17 @@ import {
   HifzWeakWord,
   ReaderSettings,
   Reciter,
+  RiwayahId,
   Surah,
   TranslationLanguage,
   WordToken,
 } from '../types/quran';
 import { getEveryAyahUrl } from '../data/quranData';
+import {
+  formatAyahByRiwayah,
+  getAyahDisplayArabic,
+  getWordDisplayArabic,
+} from '../data/qiraatData';
 import { TAJWEED_RULES, TAJWEED_STYLE_MAP } from '../data/tajweedRules';
 import { FiligreeDivider, RubElHizbBadge } from './RubElHizbIcon';
 import { HifzProgressStatus } from '../utils/hifzProgress';
@@ -186,19 +192,23 @@ function buildQuestionsForSurah(
   allSurahs: Surah[],
   weakOnly: boolean,
   weakWords: HifzWeakWord[],
-  lang: TranslationLanguage
+  lang: TranslationLanguage,
+  riwayah: RiwayahId = 'hafs',
+  maghrebiOrthography = false
 ): HifzQuestion[] {
   const poolWords: {
     word: WordToken;
     surah: Surah;
     ayah: Ayah;
+    displayArabic: string;
   }[] = [];
 
   for (const s of allSurahs) {
     for (const a of s.ayahs) {
       for (const w of a.words) {
-        if (w.arabic.trim().length > 1) {
-          poolWords.push({ word: w, surah: s, ayah: a });
+        const displayArabic = getWordDisplayArabic(a, w, riwayah, maghrebiOrthography);
+        if (displayArabic.trim().length > 1) {
+          poolWords.push({ word: w, surah: s, ayah: a, displayArabic });
         }
       }
     }
@@ -233,13 +243,26 @@ function buildQuestionsForSurah(
       targetIdx = tajweedIdx >= 0 ? tajweedIdx : ayah.words.length - 1;
     }
 
+    if (!getWordDisplayArabic(ayah, ayah.words[targetIdx], riwayah, maghrebiOrthography)) {
+      const fallbackIdx = ayah.words.findIndex((w) =>
+        Boolean(getWordDisplayArabic(ayah, w, riwayah, maghrebiOrthography))
+      );
+      if (fallbackIdx >= 0) targetIdx = fallbackIdx;
+    }
+
     const targetWord = ayah.words[targetIdx];
+    const targetDisplayArabic = getWordDisplayArabic(
+      ayah,
+      targetWord,
+      riwayah,
+      maghrebiOrthography
+    );
     const nextAyah = targetSurah.ayahs.find((a) => a.number === ayah.number + 1);
 
     // Build 3 distinct Arabic distractors prioritizing neighboring ayahs (classic Hifz jump trap!)
     const distractorCandidates = poolWords.filter(
       (p) =>
-        p.word.arabic !== targetWord.arabic &&
+        p.displayArabic !== targetDisplayArabic &&
         p.word.transliteration !== targetWord.transliteration
     );
     const sameSurahDistractors = distractorCandidates.filter(
@@ -254,10 +277,10 @@ function buildQuestionsForSurah(
     ];
 
     const pickedDistractors: typeof orderedDistractors = [];
-    const seenArabic = new Set<string>([targetWord.arabic]);
+    const seenArabic = new Set<string>([targetDisplayArabic]);
     for (const item of orderedDistractors) {
-      if (seenArabic.has(item.word.arabic)) continue;
-      seenArabic.add(item.word.arabic);
+      if (seenArabic.has(item.displayArabic)) continue;
+      seenArabic.add(item.displayArabic);
       pickedDistractors.push(item);
       if (pickedDistractors.length === 3) break;
     }
@@ -266,7 +289,7 @@ function buildQuestionsForSurah(
       [
         {
           id: `opt-correct-${ayah.verseKey}`,
-          arabic: targetWord.arabic,
+          arabic: targetDisplayArabic,
           transliteration: targetWord.transliteration,
           meaning: getWordMeaning(targetWord),
           isCorrect: true,
@@ -277,7 +300,7 @@ function buildQuestionsForSurah(
         },
         ...pickedDistractors.map((d, dIdx) => ({
           id: `opt-dist-${ayah.verseKey}-${dIdx}`,
-          arabic: d.word.arabic,
+          arabic: d.displayArabic,
           transliteration: d.word.transliteration,
           meaning: getWordMeaning(d.word),
           isCorrect: false,
@@ -310,7 +333,7 @@ function buildQuestionsForSurah(
       [
         {
           id: `next-correct-${ayah.verseKey}`,
-          arabic: targetNext.arabic,
+          arabic: getAyahDisplayArabic(targetNext, riwayah, maghrebiOrthography),
           transliteration: targetNext.transliteration,
           meaning: getAyahTranslationText(targetNext, lang).text,
           isCorrect: true,
@@ -320,7 +343,7 @@ function buildQuestionsForSurah(
         },
         ...nextDistractors.map((item, idx) => ({
           id: `next-dist-${ayah.verseKey}-${idx}`,
-          arabic: item.ayah.arabic,
+          arabic: getAyahDisplayArabic(item.ayah, riwayah, maghrebiOrthography),
           transliteration: item.ayah.transliteration,
           meaning: getAyahTranslationText(item.ayah, lang).text,
           isCorrect: false,
@@ -433,6 +456,9 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
     [surahs, selectedSurahId]
   );
 
+  const riwayah: RiwayahId = settings.riwayah ?? 'hafs';
+  const maghrebiOrthography = Boolean(settings.maghrebiOrthography);
+
   const questions = useMemo(
     () =>
       selectedSurah
@@ -441,10 +467,12 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
             surahs,
             weakQueueOnly,
             weakWords,
-            lang
+            lang,
+            riwayah,
+            maghrebiOrthography
           )
         : [],
-    [selectedSurah, surahs, weakQueueOnly, weakWords, lang]
+    [selectedSurah, surahs, weakQueueOnly, weakWords, lang, riwayah, maghrebiOrthography]
   );
 
   const activeQuestion =
@@ -816,8 +844,16 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
               body: JSON.stringify({
                 audioBase64,
                 mimeType: blob.type || 'audio/webm',
-                expectedArabic: activeQuestion.ayah.arabic,
-                words: activeQuestion.ayah.words.map((w) => w.arabic),
+                expectedArabic: getAyahDisplayArabic(
+                  activeQuestion.ayah,
+                  riwayah,
+                  maghrebiOrthography
+                ),
+                words: activeQuestion.ayah.words
+                  .map((w) =>
+                    getWordDisplayArabic(activeQuestion.ayah, w, riwayah, maghrebiOrthography)
+                  )
+                  .filter(Boolean),
               }),
             });
             if (resp.ok) {
@@ -1477,10 +1513,17 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                   className="font-quran-amiri text-[30px] sm:text-[36px] leading-[2.1] flex flex-wrap items-center gap-x-2.5 gap-y-2.5 rounded-2xl border border-dashed border-[#064E3B]/20 dark:border-emerald-300/25 bg-[#F5FFFA]/70 dark:bg-[#041D17]/65 p-4 sm:p-5 text-[#022C22] dark:text-[#E6FFF4]"
                 >
                   {activeQuestion.ayah.words.map((word) => {
+                    const displayWord = getWordDisplayArabic(
+                      activeQuestion.ayah,
+                      word,
+                      riwayah,
+                      maghrebiOrthography
+                    );
+                    if (!displayWord) return null;
                     const visible = blindFullReveal || blindPeekSec > 0 || isChecked;
                     return visible ? (
                       <span key={word.id} className="px-1">
-                        {word.arabic}
+                        {displayWord}
                       </span>
                     ) : (
                       <span
@@ -1520,7 +1563,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                   dir="rtl"
                   className="font-quran-amiri text-3xl sm:text-4xl leading-[2.0] text-right text-[#022C22] dark:text-[#E6FFF4]"
                 >
-                  {activeQuestion.ayah.arabic}{' '}
+                  {getAyahDisplayArabic(activeQuestion.ayah, riwayah, maghrebiOrthography)}{' '}
                   <span className="text-[#D97706] dark:text-amber-300 text-[0.75em]">
                     ﴿{toArabicIndicDigits(activeQuestion.ayah.number)}﴾
                   </span>
@@ -1554,7 +1597,14 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
               >
                 {activeQuestion.ayah.words.map((word, idx) => {
                   const isBlankSlot = idx === activeQuestion.targetWordIdx;
+                  const displayWord = getWordDisplayArabic(
+                    activeQuestion.ayah,
+                    word,
+                    riwayah,
+                    maghrebiOrthography
+                  );
                   if (!isBlankSlot) {
+                    if (!displayWord) return null;
                     const style =
                       settings.showTajweedColors && word.tajweed
                         ? TAJWEED_STYLE_MAP[word.tajweed]
@@ -1564,7 +1614,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                         key={word.id}
                         className={style ? style.wordTint : undefined}
                       >
-                        {word.arabic}
+                        {displayWord}
                       </span>
                     );
                   }
@@ -1591,7 +1641,12 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                       )}
                       <span>
                         {revealCorrect
-                          ? activeQuestion.targetWord.arabic
+                          ? getWordDisplayArabic(
+                              activeQuestion.ayah,
+                              activeQuestion.targetWord,
+                              riwayah,
+                              maghrebiOrthography
+                            )
                           : '؟  •••••'}
                       </span>
                     </span>
@@ -1613,7 +1668,12 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                 <p className="text-[#022C22]/85 dark:text-amber-100/90 leading-relaxed">
                   Starts with Arabic letter{' '}
                   <strong dir="rtl" className="font-quran-amiri text-base px-1">
-                    {activeQuestion.targetWord.arabic.slice(0, 2)}
+                    {getWordDisplayArabic(
+                      activeQuestion.ayah,
+                      activeQuestion.targetWord,
+                      riwayah,
+                      maghrebiOrthography
+                    ).slice(0, 2)}
                   </strong>{' '}
                   ({activeQuestion.targetWord.transliteration.slice(0, 3)}…).{' '}
                   {ruleSpec
@@ -2028,21 +2088,30 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                   />
                 </svg>
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {activeQuestion.ayah.words.slice(0, 5).map((w, idx) => (
-                    <span
-                      key={w.id}
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
-                        w.tajweed
-                          ? 'border-[#D97706]/35 bg-[#D97706]/10 text-[#904D00] dark:text-amber-200'
-                          : 'border-[#064E3B]/15 bg-white dark:bg-[#0A2921] text-[#064E3B] dark:text-emerald-200'
-                      }`}
-                    >
-                      <span dir="rtl" className="font-quran-amiri text-xs mr-1">
-                        {w.arabic}
+                  {activeQuestion.ayah.words.slice(0, 5).map((w, idx) => {
+                    const displayW = getWordDisplayArabic(
+                      activeQuestion.ayah,
+                      w,
+                      riwayah,
+                      maghrebiOrthography
+                    );
+                    if (!displayW) return null;
+                    return (
+                      <span
+                        key={w.id}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                          w.tajweed
+                            ? 'border-[#D97706]/35 bg-[#D97706]/10 text-[#904D00] dark:text-amber-200'
+                            : 'border-[#064E3B]/15 bg-white dark:bg-[#0A2921] text-[#064E3B] dark:text-emerald-200'
+                        }`}
+                      >
+                        <span dir="rtl" className="font-quran-amiri text-xs mr-1">
+                          {displayW}
+                        </span>
+                        {w.tajweed ? 'Check' : idx === 0 ? 'Active' : 'Clear'}
                       </span>
-                      {w.tajweed ? 'Check' : idx === 0 ? 'Active' : 'Clear'}
-                    </span>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </section>
@@ -2106,7 +2175,12 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                       <p className="text-xs font-bold text-[#022C22] dark:text-[#E6FFF4] truncate">
                         Target ({activeQuestion.ayah.verseKey}):{' '}
                         <span dir="rtl" className="font-quran-amiri text-sm">
-                          {activeQuestion.targetWord.arabic}
+                          {getWordDisplayArabic(
+                            activeQuestion.ayah,
+                            activeQuestion.targetWord,
+                            riwayah,
+                            maghrebiOrthography
+                          )}
                         </span>
                       </p>
                       <p className="text-[11px] text-[#404944] dark:text-emerald-200/75 truncate">
@@ -2279,7 +2353,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                         dir="rtl"
                         className="font-quran-amiri text-xl font-bold text-[#064E3B] dark:text-amber-200 shrink-0"
                       >
-                        {ww.arabic}
+                        {formatAyahByRiwayah(ww.verseKey, ww.arabic, riwayah, maghrebiOrthography)}
                       </span>
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-[#022C22] dark:text-[#E6FFF4] truncate">

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Check,
   Clock,
+  HardDrive,
   SlidersHorizontal,
   Sparkles,
   Trash2,
@@ -29,6 +30,7 @@ import {
   WordHighlightStyle,
 } from '../types/quran';
 import { RECITERS } from '../data/quranData';
+import { formatAyahByRiwayah } from '../data/qiraatData';
 import {
   TRANSLATION_LANGUAGE_OPTIONS,
   isRtlTranslationLang,
@@ -44,6 +46,7 @@ import {
   build30DayHifzSeries,
   computeHifzSummary,
 } from '../utils/hifzProgress';
+import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -56,6 +59,11 @@ interface SettingsModalProps {
   onToggleDarkMode: () => void;
   onUpdateSettings: (patch: Partial<ReaderSettings>) => void;
   onClose: () => void;
+  driveConnected?: boolean;
+  driveUserEmail?: string | null;
+  driveSigningIn?: boolean;
+  onDriveSignIn?: () => void;
+  onOpenDriveHub?: () => void;
 }
 
 type SettingsTab = 'preferences' | 'insights';
@@ -125,6 +133,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleDarkMode,
   onUpdateSettings,
   onClose,
+  driveConnected = false,
+  driveUserEmail = null,
+  driveSigningIn = false,
+  onDriveSignIn,
+  onOpenDriveHub,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('preferences');
   const [hifzChartMode, setHifzChartMode] = useState<HifzChartMode>('daily');
@@ -736,7 +749,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Live Typography & Highlight Preview */}
             <div className="rounded-xl border border-[#064E3B]/12 dark:border-emerald-300/15 bg-[#FBFBFA] dark:bg-[#041D17] px-4 py-3 text-center space-y-1">
               <p className="text-[10px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-emerald-300/80">
-                Live Script Preview
+                Live Script Preview · {(settings.riwayah ?? 'hafs') === 'warsh' ? "Warsh 'an Nāfi'" : "Ḥafṣ 'an 'Āṣim"}
+                {settings.maghrebiOrthography ? ' · Maghrebi Rasm' : ''}
               </p>
               <div
                 dir="rtl"
@@ -747,7 +761,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }`}
                 style={{ fontSize: `${Math.min(settings.arabicFontSize, 34)}px`, lineHeight: 1.85 }}
               >
-                <span className="text-[#022C22] dark:text-[#E6FFF4]">بِسْمِ</span>
+                <span className="text-[#022C22] dark:text-[#E6FFF4]">
+                  {(settings.riwayah ?? 'hafs') === 'warsh' ? 'مَلِكِ' : 'مَٰلِكِ'}
+                </span>
                 <span
                   className={`px-2 py-0.5 ${
                     (settings.highlightStyle ?? 'pill') === 'wave'
@@ -759,9 +775,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       : 'rounded-full bg-[#064E3B]/[0.08] dark:bg-amber-400/15 border border-[#D97706] dark:border-amber-400 text-[#003527] dark:text-amber-100'
                   }`}
                 >
-                  ٱللَّٰهِ
+                  يَوْمِ
                 </span>
-                <span className="text-[#022C22] dark:text-[#E6FFF4]">ٱلرَّحْمَٰنِ</span>
+                <span className="text-[#022C22] dark:text-[#E6FFF4]">
+                  {formatAyahByRiwayah('1:4', 'ٱلدِّينِ', settings.riwayah, settings.maghrebiOrthography)}
+                </span>
+                {settings.maghrebiOrthography && (
+                  <span className="text-[#0F766E] dark:text-emerald-300 text-[0.75em] opacity-85">
+                    ({formatAyahByRiwayah('113:1', 'ٱلْفَلَقِ', settings.riwayah, true)})
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1039,35 +1062,106 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </span>
             </div>
             <div className="space-y-1.5">
-              {RECITERS.map((reciter) => {
-                const selected = settings.reciterId === reciter.id;
-                return (
-                  <button
-                    key={reciter.id}
-                    type="button"
-                    onClick={() => onUpdateSettings({ reciterId: reciter.id })}
-                    className={`w-full min-h-[48px] px-3.5 py-2 rounded-xl border flex items-center justify-between text-left transition-colors ${
-                      selected
-                        ? 'border-[#D97706] bg-[#D97706]/[0.07] dark:border-amber-400 dark:bg-amber-400/12'
-                        : 'border-[#064E3B]/10 dark:border-emerald-300/15 hover:bg-[#064E3B]/[0.03] dark:hover:bg-emerald-400/8'
-                    }`}
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-[#022C22] dark:text-[#E6FFF4]">
-                        {reciter.name}
-                      </p>
-                      <p className="text-xs text-[#404944] dark:text-emerald-200/75">
-                        {reciter.style}
-                      </p>
-                    </div>
-                    {selected && <Check className="w-4 h-4 text-[#D97706] dark:text-amber-300 shrink-0" />}
-                  </button>
-                );
-              })}
+              {[...RECITERS]
+                .sort((a, b) => {
+                  const activeRiwayah = settings.riwayah ?? 'hafs';
+                  const aMatch = (a.riwayah ?? 'hafs') === activeRiwayah ? 0 : 1;
+                  const bMatch = (b.riwayah ?? 'hafs') === activeRiwayah ? 0 : 1;
+                  return aMatch - bMatch;
+                })
+                .map((reciter) => {
+                  const selected = settings.reciterId === reciter.id;
+                  const isWarshReciter = reciter.riwayah === 'warsh';
+                  return (
+                    <button
+                      key={reciter.id}
+                      type="button"
+                      onClick={() => onUpdateSettings({ reciterId: reciter.id })}
+                      className={`w-full min-h-[48px] px-3.5 py-2 rounded-xl border flex items-center justify-between gap-2 text-left transition-colors ${
+                        selected
+                          ? 'border-[#D97706] bg-[#D97706]/[0.07] dark:border-amber-400 dark:bg-amber-400/12'
+                          : 'border-[#064E3B]/10 dark:border-emerald-300/15 hover:bg-[#064E3B]/[0.03] dark:hover:bg-emerald-400/8'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-[#022C22] dark:text-[#E6FFF4]">
+                            {reciter.name}
+                          </p>
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              isWarshReciter
+                                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                : 'bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-300'
+                            }`}
+                          >
+                            {isWarshReciter ? 'Warsh' : 'Ḥafṣ'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#404944] dark:text-emerald-200/75">
+                          {reciter.style}
+                        </p>
+                      </div>
+                      {selected && <Check className="w-4 h-4 text-[#D97706] dark:text-amber-300 shrink-0" />}
+                    </button>
+                  );
+                })}
             </div>
+
+            {/* Google Drive Cloud Backup & Study Hub Card */}
+            {(onDriveSignIn || onOpenDriveHub) && (
+              <div className="pt-2 border-t border-[#064E3B]/10 dark:border-emerald-300/15 space-y-2.5">
+                <div className="rounded-xl border border-[#064E3B]/15 dark:border-emerald-300/20 bg-[#FBFBFA] dark:bg-[#041D17] p-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-[#064E3B]/10 dark:bg-emerald-500/20 text-[#064E3B] dark:text-emerald-300 flex items-center justify-center shrink-0">
+                        <HardDrive className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-[#022C22] dark:text-[#E6FFF4]">
+                          Google Drive Study Sync
+                        </p>
+                        <p className="text-[11px] text-[#404944] dark:text-emerald-200/75">
+                          {driveConnected
+                            ? `Connected${driveUserEmail ? ` as ${driveUserEmail}` : ''}`
+                            : 'Back up bookmarks, notes, Hifz & Khatmah progress to Google Drive'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!driveConnected && onDriveSignIn && (
+                      <GoogleSignInButton
+                        onClick={onDriveSignIn}
+                        disabled={driveSigningIn}
+                        label={driveSigningIn ? 'Connecting…' : 'Sign in with Google'}
+                      />
+                    )}
+                    {onOpenDriveHub && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenDriveHub();
+                        }}
+                        className="min-h-[38px] px-3.5 rounded-xl bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22] text-xs font-semibold hover:opacity-95"
+                      >
+                        Open Google Drive Hub
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           </div>
         )}
+
+        <div className="mt-5 pt-3 border-t border-[#064E3B]/10 dark:border-emerald-300/15 text-center">
+          <p className="text-[11px] text-[#404944]/80 dark:text-emerald-200/60">
+            &copy; 2026 Muhmmad Khalil &middot; Noor Recite
+          </p>
+        </div>
       </div>
     </div>
   );

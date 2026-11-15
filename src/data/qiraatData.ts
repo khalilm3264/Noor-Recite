@@ -1,4 +1,4 @@
-import { RiwayahId } from '../types/quran';
+import { Ayah, RiwayahId, WordToken } from '../types/quran';
 
 export const WARSH_PREVIEW_NOTICE = 'Limited Warsh text preview: only 1:4 and 2:9 are adjusted. Other verses retain the base Ḥafṣ text, and reader audio uses your selected reciter. This is not a complete Warsh Muṣḥaf.';
 
@@ -111,8 +111,8 @@ export const RIWAYAH_PROFILES: Record<RiwayahId, RiwayahProfile> = {
     imam: 'Imām Nāfi‘ ibn ‘Abd al-Raḥmān al-Madanī (d. 169 AH)',
     tariq: 'Ṭarīq al-Azraq',
     region: 'Madīnah · Maghrib (Morocco, Algeria, Tunisia) · West Africa',
-    sampleReciterName: 'Shaykh Maḥmūd Khalīl al-Ḥuṣarī (Warsh Reference)',
-    everyAyahFolder: 'Husary_128kbps',
+    sampleReciterName: 'Shaykh Yāssīn al-Jazā’irī (Warsh)',
+    everyAyahFolder: 'warsh/warsh_Yassin_Al_Jazaery_64kbps',
     sampleSurahId: 1,
     sampleAyahNumber: 4,
     highlightSummary:
@@ -311,13 +311,13 @@ export const FARSH_COMPARISONS: FarshComparisonItem[] = [
     surahId: 2,
     ayahNumber: 9,
     surahName: 'Al-Baqarah',
-    ruleCategory: 'Form III vs Form I Verb',
-    hafsArabic: 'يُخَـٰدِعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟',
-    hafsTranslit: 'Yukhādi‘ūna llāha...',
-    warshArabic: 'يَخْدَعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟',
-    warshTranslit: 'Yakhda‘ūna llāha (2/4/6 Badal)...',
-    qalunArabic: 'يَخْدَعُونَ ٱللَّهَ وَٱلَّذِينَ ءَامَنُوا۟',
-    note: 'Warsh and Nāfi‘ pronounce "Yakhda‘ūna" matching the second clause, while elongating the hamzah of ءَامَنُوا (Madd al-Badal).',
+    ruleCategory: 'Form III vs Form I (Second Verb)',
+    hafsArabic: 'وَمَا يَخْدَعُونَ إِلَّآ أَنفُسَهُمْ',
+    hafsTranslit: 'Wa-mā yakhda‘ūna illā anfusahum',
+    warshArabic: 'وَمَا يُخَٰدِعُونَ إِلَّآ أَنفُسَهُمْ',
+    warshTranslit: 'Wa-mā yukhādi‘ūna illā anfusahum',
+    qalunArabic: 'وَمَا يُخَٰدِعُونَ إِلَّآ أَنفُسَهُمْ',
+    note: 'In the second clause of 2:9, Ḥafṣ reads Form I "yakhda‘ūna" whereas Warsh & Qālūn preserve Form III "yukhādi‘ūna" matching the opening verb of the verse.',
   },
   {
     id: 'maryam-19-19',
@@ -532,8 +532,63 @@ export function convertToMaghrebiScript(arabic: string): string {
     .replace(/\u0642/g, '\u06A7'); // ق -> ڧ
 }
 
+const WARSH_FARSH_REPLACEMENTS: Record<string, Array<[RegExp, string]>> = {
+  '1:4': [[/مَـ?ٰ?لِكِ/, 'مَلِكِ']],
+  '2:9': [[/يَخْدَعُونَ/, 'يُخَٰدِعُونَ']],
+  '2:58': [[/نَّغْفِرْ/, 'يُغْفَرْ']],
+  '2:85': [[/تَظَـ?ٰ?هَرُونَ/, 'تَظَّـٰهَرُونَ']],
+  '2:125': [[/وَٱتَّخِذُوا۟?/, 'وَٱتَّخَذُوا۟']],
+  '2:140': [[/تَقُولُونَ/, 'يَقُولُونَ']],
+  '2:184': [
+    [/فِدْيَةٌ/, 'فِدْيَةُ'],
+    [/مِسْكِينٍ/, 'مَسَـٰكِينَ'],
+  ],
+  '2:259': [[/نُنشِزُهَا/, 'نُنشِرُهَا']],
+  '3:37': [[/وَكَفَّلَهَا/, 'وَكَفَلَهَا']],
+  '3:79': [[/تَعْلَمُونَ/, 'تُعَلِّمُونَ']],
+  '3:146': [[/قَـ?ٰ?تَلَ/, 'قُتِلَ']],
+  '6:57': [[/يَقُصُّ/, 'يَقْضِى']],
+  '7:57': [[/بُشْرًۢا/, 'نُشُرًۢا']],
+  '10:3': [[/يَذَّكَّرُونَ/, 'تَذَكَّرُونَ']],
+  '18:36': [[/مِنْهَا/, 'مِنْهُمَا']],
+  '19:19': [[/لِأَهَبَ/, 'لِيَهَبَ']],
+  '21:4': [[/قَالَ/, 'قُلْ']],
+  '33:68': [[/كَثِيرًا/, 'كَبِيرًا']],
+  '91:15': [[/وَلَا/, 'فَلَا']],
+};
+
+function applyUniversalWarshFallback(arabic: string): string {
+  return arabic
+    // Classic Warsh Ibdāl of Hamzah Sākinah on frequent Quranic roots
+    .replace(/يُؤْمِن/g, 'يُومِن')
+    .replace(/تُؤْمِن/g, 'تُومِن')
+    .replace(/مُؤْمِن/g, 'مُومِن')
+    .replace(/يُؤْتَ/g, 'يُوتَ')
+    .replace(/تُؤْتِ/g, 'تُوتِ')
+    .replace(/يَأْمُر/g, 'يَامُر')
+    .replace(/تَأْمُر/g, 'تَامُر')
+    .replace(/بِئْسَ/g, 'بِيسَ')
+    .replace(/ذِئْب/g, 'ذِيب')
+    .replace(/شِئْت/g, 'شِيت')
+    .replace(/جِئْت/g, 'جِيت')
+    .replace(/يَأْلَم/g, 'يَالَم')
+    .replace(/مَأْوَىٰ/g, 'مَاوَىٰ')
+    // Warsh Naql al-Ḥarakah on definite article al- + hamzah
+    .replace(/ٱلْأَ/g, 'اَ۬لَ')
+    .replace(/ٱلْإِ/g, 'اَ۬لِ')
+    .replace(/ٱلْآ/g, 'اَ۬لَا')
+    .replace(/ٱلْءَا/g, 'اَ۬لَا')
+    .replace(/بِٱلْأَ/g, 'بِالَ')
+    .replace(/بِٱلْإِ/g, 'بِالِ')
+    // Al-Quds / Warsh Waṣl & Ha' / Ṣilāt hints
+    .replace(/عَلَيْهِمُ /g, 'عَلَيْهِمُۥ ')
+    .replace(/فِيهِمُ /g, 'فِيهِمُۥ ');
+}
+
 /**
- * Known textual adjustments for Warsh preview on supported verses (e.g. 1:4 مَـٰلِكِ -> مَلِكِ).
+ * Formats any Arabic verse or word according to the active Riwāyah & script settings.
+ * Hydrated verses use the authentic 114-surah Warsh text directly; unhydrated snippets
+ * apply Warsh Farsh variants and universal Warsh Uṣūl rules (Ibdāl & Naql).
  */
 export function formatAyahByRiwayah(
   verseKey: string,
@@ -543,11 +598,40 @@ export function formatAyahByRiwayah(
 ): string {
   let result = arabic;
   if (riwayah === 'warsh') {
-    if (verseKey === '1:4') {
-      result = result.replace(/مَـ?ٰ?لِكِ/, 'مَلِكِ');
-    } else if (verseKey === '2:9') {
-      result = result.replace(/يُخَـ?ٰ?دِعُونَ/, 'يَخْدَعُونَ');
+    const farshRules = WARSH_FARSH_REPLACEMENTS[verseKey];
+    if (farshRules) {
+      for (const [pattern, replacement] of farshRules) {
+        result = result.replace(pattern, replacement);
+      }
     }
+    result = applyUniversalWarshFallback(result);
   }
   return maghrebiOrthography ? convertToMaghrebiScript(result) : result;
+}
+
+export function getWordDisplayArabic(
+  ayah: Pick<Ayah, 'verseKey'>,
+  word: Pick<WordToken, 'arabic' | 'arabicWarsh'>,
+  riwayah: RiwayahId = 'hafs',
+  maghrebiOrthography = false
+): string {
+  if (riwayah === 'warsh' && word.arabicWarsh !== undefined) {
+    return maghrebiOrthography
+      ? convertToMaghrebiScript(word.arabicWarsh)
+      : word.arabicWarsh;
+  }
+  return formatAyahByRiwayah(ayah.verseKey, word.arabic, riwayah, maghrebiOrthography);
+}
+
+export function getAyahDisplayArabic(
+  ayah: Pick<Ayah, 'verseKey' | 'arabic' | 'arabicWarsh'>,
+  riwayah: RiwayahId = 'hafs',
+  maghrebiOrthography = false
+): string {
+  if (riwayah === 'warsh' && ayah.arabicWarsh) {
+    return maghrebiOrthography
+      ? convertToMaghrebiScript(ayah.arabicWarsh)
+      : ayah.arabicWarsh;
+  }
+  return formatAyahByRiwayah(ayah.verseKey, ayah.arabic, riwayah, maghrebiOrthography);
 }

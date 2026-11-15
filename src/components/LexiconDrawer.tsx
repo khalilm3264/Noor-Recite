@@ -16,10 +16,11 @@ import {
   Play,
   Volume2,
 } from 'lucide-react';
-import { Ayah, MufassirId, TranslationLanguage, WordToken } from '../types/quran';
+import { Ayah, MufassirId, RiwayahId, TranslationLanguage, WordToken } from '../types/quran';
 import { TAJWEED_STYLE_MAP, TAJWEED_RULES } from '../data/tajweedRules';
 import { getAyahFootnotes, getWordFootnote } from '../data/wordFootnotes';
 import { MUFASSIRUN_LIST, getScholarlyExegesis } from '../data/tafsirData';
+import { formatAyahByRiwayah, getWordDisplayArabic } from '../data/qiraatData';
 import {
   QARI_TTS_STYLES,
   getAiTtsAudioUrl,
@@ -39,6 +40,8 @@ interface LexiconDrawerProps {
   selectedWord: WordToken | null;
   surahName: string;
   translationLanguage?: TranslationLanguage;
+  riwayah?: RiwayahId;
+  maghrebiOrthography?: boolean;
   isBookmarked: boolean;
   existingNote: string;
   isMobileSheetOpen: boolean;
@@ -59,6 +62,8 @@ export const LexiconDrawerContent: React.FC<
   selectedWord,
   surahName,
   translationLanguage = 'en',
+  riwayah = 'hafs',
+  maghrebiOrthography = false,
   isBookmarked,
   existingNote,
   onSelectWord,
@@ -375,7 +380,12 @@ export const LexiconDrawerContent: React.FC<
                   </button>
                 </div>
                 <p dir="rtl" className="font-quran-amiri text-xl leading-[1.9] text-[#003527] dark:text-amber-100">
-                  {scholarlyExegesis.arabicMatn}
+                  {formatAyahByRiwayah(
+                    ayah.verseKey,
+                    scholarlyExegesis.arabicMatn,
+                    riwayah,
+                    maghrebiOrthography
+                  )}
                 </p>
                 {ttsError && ttsActiveKey === matnKey && (
                   <p className="text-[11px] text-[#BA1A1A] dark:text-rose-300">{ttsError}</p>
@@ -467,7 +477,7 @@ export const LexiconDrawerContent: React.FC<
                     dir="rtl"
                     className="font-quran-amiri text-[34px] leading-[1.7] text-[#003527] dark:text-amber-200 shrink-0"
                   >
-                    {activeWord.arabic}
+                    {getWordDisplayArabic(ayah, activeWord, riwayah, maghrebiOrthography)}
                   </span>
                 </div>
 

@@ -1,5 +1,6 @@
 import { WARSH_PREVIEW_NOTICE } from './data/qiraatData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { User } from 'firebase/auth';
 import {
   AppScreen,
   Ayah,
@@ -26,9 +27,11 @@ import {
   RECITERS,
   SURAH_DIRECTORY,
   alignTranslationSegments,
+  alignWarshWordsToHafs,
   fetchChapterTimingData,
   fetchSurahFromApi,
   fetchSurahLanguageOverlay,
+  fetchSurahWarshOverlay,
   getEveryAyahUrl,
   getOpenerAudioUrl,
 } from './data/quranData';
@@ -74,6 +77,14 @@ import { HadithsView } from './components/HadithsView';
 import { SalahView } from './components/SalahView';
 import { TajweedStudioView } from './components/TajweedStudioView';
 import { BookmarksView } from './components/BookmarksView';
+import { GoogleDriveView } from './components/GoogleDriveView';
+import { NoorDriveBackupPayload } from './utils/googleDriveApi';
+import {
+  clearDriveAccessToken,
+  googleDriveSignIn,
+  googleDriveSignOut,
+  initDriveAuth,
+} from './utils/googleDriveAuth';
 
 const DEFAULT_SETTINGS: ReaderSettings = {
   arabicFont: 'amiri',
@@ -626,6 +637,136 @@ export default function App() {
     }
   }, [bookmarkCollections]);
 
+  // Google Drive Auth & Study Backup State (access token stays in memory only)
+  const [driveUser, setDriveUser] = useState<User | null>(null);
+  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(null);
+  const [needsDriveAuth, setNeedsDriveAuth] = useState<boolean>(true);
+  const [isDriveSigningIn, setIsDriveSigningIn] = useState<boolean>(false);
+  const [driveAuthError, setDriveAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = initDriveAuth(
+      (user, token) => {
+        setDriveUser(user);
+        setDriveAccessToken(token);
+        setNeedsDriveAuth(false);
+        setDriveAuthError(null);
+      },
+      (existingUser) => {
+        setDriveUser(existingUser);
+        setDriveAccessToken(null);
+        setNeedsDriveAuth(true);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleDriveSignIn = useCallback(async () => {
+    setIsDriveSigningIn(true);
+    setDriveAuthError(null);
+    try {
+      const result = await googleDriveSignIn();
+      if (result) {
+        setDriveUser(result.user);
+        setDriveAccessToken(result.accessToken);
+        setNeedsDriveAuth(false);
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Google sign-in was cancelled or could not complete.';
+      setDriveAuthError(msg);
+      setNeedsDriveAuth(true);
+    } finally {
+      setIsDriveSigningIn(false);
+    }
+  }, []);
+
+  const handleDriveTokenExpired = useCallback(() => {
+    clearDriveAccessToken();
+    setDriveAccessToken(null);
+    setNeedsDriveAuth(true);
+  }, []);
+
+  const handleDriveSignOut = useCallback(async () => {
+    await googleDriveSignOut();
+    setDriveUser(null);
+    setDriveAccessToken(null);
+    setNeedsDriveAuth(true);
+    setDriveAuthError(null);
+  }, []);
+
+  const driveBackupPayload = useMemo<NoorDriveBackupPayload>(
+    () => ({
+      app: 'Noor Recite',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      accountEmail: driveUser?.email || undefined,
+      settings,
+      darkMode,
+      dailyGoal,
+      bookmarks,
+      bookmarkCollections,
+      khatmahPlan,
+      hifzSpacedQueue,
+      hifzWeakWords: weakWords,
+      recitationHistory,
+      hifzProgressEvents,
+    }),
+    [
+      driveUser,
+      settings,
+      darkMode,
+      dailyGoal,
+      bookmarks,
+      bookmarkCollections,
+      khatmahPlan,
+      hifzSpacedQueue,
+      weakWords,
+      recitationHistory,
+      hifzProgressEvents,
+    ]
+  );
+
+  const handleRestoreDriveBackup = useCallback(
+    (payload: NoorDriveBackupPayload) => {
+      if (payload.settings) {
+        failedLangOverlayRef.current.clear();
+        setSettings({ ...DEFAULT_SETTINGS, ...payload.settings });
+      }
+      if (typeof payload.darkMode === 'boolean') {
+        setDarkMode(payload.darkMode);
+      }
+      if (typeof payload.dailyGoal === 'number' && payload.dailyGoal > 0) {
+        setDailyGoal(payload.dailyGoal);
+      }
+      if (Array.isArray(payload.bookmarks)) {
+        setBookmarks(payload.bookmarks);
+      }
+      if (Array.isArray(payload.bookmarkCollections)) {
+        setBookmarkCollections(payload.bookmarkCollections);
+      }
+      if (payload.khatmahPlan) {
+        setKhatmahPlan({ ...DEFAULT_KHATMAH_PLAN, ...payload.khatmahPlan });
+      }
+      if (Array.isArray(payload.hifzSpacedQueue)) {
+        setHifzSpacedQueue(payload.hifzSpacedQueue);
+      }
+      if (Array.isArray(payload.hifzWeakWords)) {
+        setWeakWords(payload.hifzWeakWords);
+      }
+      if (Array.isArray(payload.recitationHistory)) {
+        setRecitationHistory(payload.recitationHistory);
+        saveRecitationHistory(payload.recitationHistory);
+      }
+      if (Array.isArray(payload.hifzProgressEvents)) {
+        setHifzProgressEvents(payload.hifzProgressEvents);
+      }
+    },
+    []
+  );
+
   const [tajweedInitialTab, setTajweedInitialTab] = useState<'rules' | 'grader' | 'qiraat'>('rules');
   const [tajweedInitialTarget, setTajweedInitialTarget] = useState<{
     surahId: number;
@@ -710,6 +851,8 @@ export default function App() {
   const fetchingBoundsRef = useRef<Set<string>>(new Set());
   const fetchingLangOverlayRef = useRef<Set<string>>(new Set());
   const failedLangOverlayRef = useRef<Set<string>>(new Set());
+  const fetchingWarshRef = useRef<Set<number>>(new Set());
+  const failedWarshRef = useRef<Set<number>>(new Set());
 
   const activeTranslationLang: TranslationLanguage = settings.translationLanguage ?? 'en';
 
@@ -874,6 +1017,68 @@ export default function App() {
       cancelled = true;
     };
   }, [activeSurah, activeTranslationLang]);
+
+  // Hydrate authentic Warsh 'an Nafi' text across all 114 surahs when Warsh Riwayah is active
+  useEffect(() => {
+    if ((settings.riwayah ?? 'hafs') !== 'warsh') return;
+
+    const candidateSurahs =
+      activeScreen === 'hifz' || activeScreen === 'tajweed'
+        ? [activeSurah, ...Object.values(surahCache).filter((s) => s.id !== activeSurah.id)]
+        : [activeSurah];
+
+    const targets = candidateSurahs.filter(
+      (s) =>
+        s.ayahs.some((a) => !a.arabicWarsh) &&
+        !fetchingWarshRef.current.has(s.id) &&
+        !failedWarshRef.current.has(s.id)
+    );
+    if (targets.length === 0) return;
+
+    let cancelled = false;
+    for (const target of targets) {
+      const surahId = target.id;
+      fetchingWarshRef.current.add(surahId);
+      fetchSurahWarshOverlay(surahId)
+        .then((overlay) => {
+          if (cancelled) return;
+          setSurahCache((prev) => {
+            const current = prev[surahId];
+            if (!current) return prev;
+            const updatedAyahs = current.ayahs.map((a) => {
+              const warshArabic = overlay.versesByNumber[a.number];
+              if (!warshArabic) return a;
+              const alignedWords = alignWarshWordsToHafs(warshArabic, a.words);
+              return {
+                ...a,
+                arabicWarsh: warshArabic,
+                words: a.words.map((w, wIdx) => ({
+                  ...w,
+                  arabicWarsh: alignedWords[wIdx] ?? w.arabic,
+                })),
+              };
+            });
+            return {
+              ...prev,
+              [surahId]: {
+                ...current,
+                ayahs: updatedAyahs,
+              },
+            };
+          });
+        })
+        .catch(() => {
+          failedWarshRef.current.add(surahId);
+        })
+        .finally(() => {
+          fetchingWarshRef.current.delete(surahId);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.riwayah, activeSurah, activeScreen, surahCache]);
 
   const reciterChapterData = activeReciter.quranComId
     ? chapterTimingCache[`${activeReciter.quranComId}-${activeSurah.id}`]
@@ -2206,8 +2411,34 @@ export default function App() {
       setLoadingSurahId(entry.id);
 
       try {
-        const fetched = await fetchSurahFromApi(entry);
+        const fetchedRaw = await fetchSurahFromApi(entry);
         if (playbackSessionRef.current !== session) return;
+
+        let fetched = fetchedRaw;
+        if ((settings.riwayah ?? 'hafs') === 'warsh') {
+          try {
+            const warshOverlay = await fetchSurahWarshOverlay(entry.id);
+            if (playbackSessionRef.current !== session) return;
+            fetched = {
+              ...fetchedRaw,
+              ayahs: fetchedRaw.ayahs.map((a) => {
+                const warshArabic = warshOverlay.versesByNumber[a.number];
+                if (!warshArabic) return a;
+                const alignedWords = alignWarshWordsToHafs(warshArabic, a.words);
+                return {
+                  ...a,
+                  arabicWarsh: warshArabic,
+                  words: a.words.map((w, wIdx) => ({
+                    ...w,
+                    arabicWarsh: alignedWords[wIdx] ?? w.arabic,
+                  })),
+                };
+              }),
+            };
+          } catch {
+            // Non-blocking: universal Warsh orthography rules still apply cleanly
+          }
+        }
 
         const targetAyah =
           fetched.ayahs.find((a) => a.number === ayahNum) ?? fetched.ayahs[0];
@@ -2266,7 +2497,43 @@ export default function App() {
       clearFallbackTimer,
       primeAudioForOpener,
       primeAudioForVerse,
+      settings.riwayah,
     ]
+  );
+
+  const handleApplySettingsPatch = useCallback(
+    (patch: Partial<ReaderSettings>) => {
+      if (patch.translationLanguage) {
+        failedLangOverlayRef.current.clear();
+      }
+      if (patch.riwayah === 'warsh') {
+        failedWarshRef.current.clear();
+      }
+      setSettings((prev) => {
+        const next: ReaderSettings = { ...prev, ...patch };
+        if (patch.riwayah && !patch.reciterId) {
+          const currentReciter = RECITERS.find((r) => r.id === prev.reciterId);
+          const currentReciterRiwayah = currentReciter?.riwayah ?? 'hafs';
+          if (currentReciterRiwayah !== patch.riwayah) {
+            next.reciterId = patch.riwayah === 'warsh' ? 'yassin-warsh' : 'ghamdi';
+          }
+        } else if (patch.reciterId && !patch.riwayah) {
+          const pickedReciter = RECITERS.find((r) => r.id === patch.reciterId);
+          if (pickedReciter?.riwayah) {
+            next.riwayah = pickedReciter.riwayah;
+          }
+        }
+        if (next.reciterId !== prev.reciterId) {
+          clearTransitionTimer();
+          pendingSeekSecRef.current = null;
+          latestRelTimeRef.current = 0;
+          completionLockKeyRef.current = null;
+          setCurrentTime(0);
+        }
+        return next;
+      });
+    },
+    [clearTransitionTimer]
   );
 
   const handleOpenSurahFromDirectory = (entry: SurahDirectoryEntry) => {
@@ -3013,6 +3280,7 @@ export default function App() {
         onToggleDarkMode={() => setDarkMode((d) => !d)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         bookmarkCount={bookmarks.length}
+        isDriveConnected={Boolean(driveAccessToken && !needsDriveAuth)}
       />
 
       <main ref={mainScrollRef} className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-clip">
@@ -3124,6 +3392,8 @@ export default function App() {
                 selectedWord={selectedWord}
                 surahName={activeSurah.nameSimple}
                 translationLanguage={activeTranslationLang}
+                riwayah={settings.riwayah ?? 'hafs'}
+                maghrebiOrthography={Boolean(settings.maghrebiOrthography)}
                 isBookmarked={Boolean(inspectedBookmark)}
                 existingNote={inspectedBookmark?.note ?? ''}
                 isMobileSheetOpen={isMobileSheetOpen}
@@ -3344,9 +3614,9 @@ export default function App() {
             bookmarkedKeys={bookmarkedKeys}
             activeRiwayah={settings.riwayah ?? 'hafs'}
             maghrebiOrthography={Boolean(settings.maghrebiOrthography)}
-            onSetGlobalRiwayah={(r) => setSettings((s) => ({ ...s, riwayah: r }))}
+            onSetGlobalRiwayah={(r) => handleApplySettingsPatch({ riwayah: r })}
             onToggleMaghrebiOrthography={(enabled) =>
-              setSettings((s) => ({ ...s, maghrebiOrthography: enabled }))
+              handleApplySettingsPatch({ maghrebiOrthography: enabled })
             }
             onBookmarkAyah={(surah, ayah) => {
               const localized = getLocalizedAyahTranslation(ayah);
@@ -3419,8 +3689,31 @@ export default function App() {
             onRemoveBookmark={(key) =>
               setBookmarks((prev) => prev.filter((b) => b.verseKey !== key))
             }
+            riwayah={settings.riwayah ?? 'hafs'}
+            maghrebiOrthography={Boolean(settings.maghrebiOrthography)}
           />
         )}
+
+        {activeScreen === 'drive' && (
+          <GoogleDriveView
+            user={driveUser}
+            accessToken={driveAccessToken}
+            needsAuth={needsDriveAuth}
+            isSigningIn={isDriveSigningIn}
+            authError={driveAuthError}
+            onSignIn={() => void handleDriveSignIn()}
+            onSignOut={() => void handleDriveSignOut()}
+            onTokenExpired={handleDriveTokenExpired}
+            backupPayload={driveBackupPayload}
+            onRestoreBackup={handleRestoreDriveBackup}
+          />
+        )}
+
+        <footer className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-2 text-center">
+          <p className="text-xs text-[#404944]/80 dark:text-emerald-200/60 tracking-wide">
+            &copy; 2026 Muhmmad Khalil &middot; Noor Recite. All rights reserved.
+          </p>
+        </footer>
       </main>
 
       {/* Full-Width Docked Bottom Player Bar — resides cleanly outside <main> so verse text is never blocked */}
@@ -3448,12 +3741,7 @@ export default function App() {
           onCycleSpeed={handleCycleSpeed}
           onCycleRepeat={handleCycleRepeat}
           onSelectReciter={(reciterId) => {
-            clearTransitionTimer();
-            pendingSeekSecRef.current = null;
-            latestRelTimeRef.current = 0;
-            completionLockKeyRef.current = null;
-            setCurrentTime(0);
-            setSettings((prev) => ({ ...prev, reciterId }));
+            handleApplySettingsPatch({ reciterId });
           }}
         />
       )}
@@ -3479,20 +3767,16 @@ export default function App() {
           setHifzProgressEvents([]);
         }}
         onToggleDarkMode={() => setDarkMode((d) => !d)}
-        onUpdateSettings={(patch) => {
-          if (patch.translationLanguage) {
-            failedLangOverlayRef.current.clear();
-          }
-          if (patch.reciterId && patch.reciterId !== settings.reciterId) {
-            clearTransitionTimer();
-            pendingSeekSecRef.current = null;
-            latestRelTimeRef.current = 0;
-            completionLockKeyRef.current = null;
-            setCurrentTime(0);
-          }
-          setSettings((prev) => ({ ...prev, ...patch }));
-        }}
+        onUpdateSettings={handleApplySettingsPatch}
         onClose={() => setIsSettingsOpen(false)}
+        driveConnected={Boolean(driveAccessToken && !needsDriveAuth)}
+        driveUserEmail={driveUser?.email ?? null}
+        driveSigningIn={isDriveSigningIn}
+        onDriveSignIn={() => void handleDriveSignIn()}
+        onOpenDriveHub={() => {
+          setActiveScreen('drive');
+          mainScrollRef.current?.scrollTo({ top: 0 });
+        }}
       />
 
       <DailyGoalReminderToast

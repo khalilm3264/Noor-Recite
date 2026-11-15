@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Ayah, OpenerPhase, ReaderSettings, Reciter, Surah } from '../types/quran';
 import { BASMALAH_OPENER, ISTIADHAH_OPENER } from '../data/quranData';
+import { getWordDisplayArabic } from '../data/qiraatData';
 
 interface FloatingPlayerDeckProps {
   surah: Surah;
@@ -152,7 +153,12 @@ export const FloatingPlayerDeck: React.FC<FloatingPlayerDeckProps> = ({
           <>
             <span className="opacity-45">·</span>
             <span dir="rtl" className="font-quran-amiri text-sm leading-none text-amber-200">
-              {word.arabic}
+              {getWordDisplayArabic(
+                activeAyah,
+                word,
+                settings.riwayah,
+                settings.maghrebiOrthography
+              )}
             </span>
           </>
         )}
@@ -183,40 +189,61 @@ export const FloatingPlayerDeck: React.FC<FloatingPlayerDeckProps> = ({
         Select Reciter (Qari)
       </p>
       <div className="space-y-1 max-h-[min(16rem,45dvh)] overflow-y-auto">
-        {reciters.map((item) => {
-          const isSelected = item.id === reciter.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="option"
-              aria-selected={isSelected}
-              onClick={() => {
-                onSelectReciter(item.id);
-                setIsReciterMenuOpen(false);
-              }}
-              className={`w-full min-h-[42px] px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors ${
-                isSelected
-                  ? 'bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22]'
-                  : 'text-[#022C22] hover:bg-[#064E3B]/6 dark:text-[#E6FFF4] dark:hover:bg-emerald-400/10'
-              }`}
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-semibold truncate">{item.name}</p>
-                <p
-                  className={`text-[10px] truncate ${
-                    isSelected
-                      ? 'text-white/80 dark:text-[#022C22]/80'
-                      : 'text-[#404944] dark:text-emerald-200/75'
-                  }`}
-                >
-                  {item.style}
-                </p>
-              </div>
-              {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-            </button>
-          );
-        })}
+        {[...reciters]
+          .sort((a, b) => {
+            const activeRiw = settings.riwayah ?? 'hafs';
+            const aMatch = (a.riwayah ?? 'hafs') === activeRiw ? 0 : 1;
+            const bMatch = (b.riwayah ?? 'hafs') === activeRiw ? 0 : 1;
+            return aMatch - bMatch;
+          })
+          .map((item) => {
+            const isSelected = item.id === reciter.id;
+            const isWarshReciter = item.riwayah === 'warsh';
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => {
+                  onSelectReciter(item.id);
+                  setIsReciterMenuOpen(false);
+                }}
+                className={`w-full min-h-[42px] px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors ${
+                  isSelected
+                    ? 'bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22]'
+                    : 'text-[#022C22] hover:bg-[#064E3B]/6 dark:text-[#E6FFF4] dark:hover:bg-emerald-400/10'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold truncate">{item.name}</p>
+                    <span
+                      className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold shrink-0 ${
+                        isSelected
+                          ? 'bg-white/20 text-white dark:bg-[#022C22]/20 dark:text-[#022C22]'
+                          : isWarshReciter
+                          ? 'bg-[#D97706]/15 text-[#904D00] dark:bg-amber-400/20 dark:text-amber-300'
+                          : 'bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-200'
+                      }`}
+                    >
+                      {isWarshReciter ? 'Warsh' : 'Ḥafṣ'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-[10px] truncate ${
+                      isSelected
+                        ? 'text-white/80 dark:text-[#022C22]/80'
+                        : 'text-[#404944] dark:text-emerald-200/75'
+                    }`}
+                  >
+                    {item.style}
+                  </p>
+                </div>
+                {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+              </button>
+            );
+          })}
       </div>
     </div>
   );

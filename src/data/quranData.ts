@@ -18,16 +18,18 @@ export const RECITERS: Reciter[] = [
   {
     id: 'ghamdi',
     name: 'Saad Al-Ghamdi',
-    style: 'Murattal · Serene & Measured',
+    style: 'Murattal · Ḥafṣ ‘an ‘Āṣim',
     everyAyahFolder: 'Ghamadi_40kbps',
+    riwayah: 'hafs',
     hasAudhubillah: true,
     hasBismillahFile: true,
   },
   {
     id: 'alafasy',
     name: 'Mishary Rashid Alafasy',
-    style: 'Murattal · Exact Word-Sync',
+    style: 'Murattal · Exact Word-Sync · Ḥafṣ',
     everyAyahFolder: 'Alafasy_128kbps',
+    riwayah: 'hafs',
     quranComId: 7,
     hasAudhubillah: true,
     hasBismillahFile: true,
@@ -35,8 +37,9 @@ export const RECITERS: Reciter[] = [
   {
     id: 'husary',
     name: 'Mahmoud Khalil Al-Husary',
-    style: 'Mujawwad Study · Exact Word-Sync',
+    style: 'Mujawwad Study · Exact Word-Sync · Ḥafṣ',
     everyAyahFolder: 'Husary_128kbps',
+    riwayah: 'hafs',
     quranComId: 6,
     hasAudhubillah: true,
     hasBismillahFile: true,
@@ -44,8 +47,9 @@ export const RECITERS: Reciter[] = [
   {
     id: 'abdulbasit',
     name: 'Abdul Basit Abdus Samad',
-    style: 'Murattal · Exact Word-Sync',
+    style: 'Murattal · Exact Word-Sync · Ḥafṣ',
     everyAyahFolder: 'Abdul_Basit_Murattal_192kbps',
+    riwayah: 'hafs',
     quranComId: 2,
     hasAudhubillah: false,
     hasBismillahFile: false,
@@ -53,8 +57,9 @@ export const RECITERS: Reciter[] = [
   {
     id: 'minshawi',
     name: 'Muhammad Siddiq Al-Minshawi',
-    style: 'Murattal · Exact Word-Sync',
+    style: 'Murattal · Exact Word-Sync · Ḥafṣ',
     everyAyahFolder: 'Minshawy_Murattal_128kbps',
+    riwayah: 'hafs',
     quranComId: 9,
     hasAudhubillah: false,
     hasBismillahFile: false,
@@ -62,11 +67,39 @@ export const RECITERS: Reciter[] = [
   {
     id: 'shatri',
     name: 'Abu Bakr Al-Shatri',
-    style: 'Murattal · Exact Word-Sync',
+    style: 'Murattal · Exact Word-Sync · Ḥafṣ',
     everyAyahFolder: 'Abu_Bakr_Ash-Shaatree_128kbps',
+    riwayah: 'hafs',
     quranComId: 4,
     hasAudhubillah: true,
     hasBismillahFile: true,
+  },
+  {
+    id: 'yassin-warsh',
+    name: 'Yassin Al-Jazaery (Warsh)',
+    style: 'Murattal · Warsh ‘an Nāfi‘',
+    everyAyahFolder: 'warsh/warsh_Yassin_Al_Jazaery_64kbps',
+    riwayah: 'warsh',
+    hasAudhubillah: false,
+    hasBismillahFile: false,
+  },
+  {
+    id: 'dosary-warsh',
+    name: 'Ibrahim Al-Dosary (Warsh)',
+    style: 'Murattal · Warsh ‘an Nāfi‘',
+    everyAyahFolder: 'warsh/warsh_ibrahim_aldosary_128kbps',
+    riwayah: 'warsh',
+    hasAudhubillah: false,
+    hasBismillahFile: false,
+  },
+  {
+    id: 'abdulbasit-warsh',
+    name: 'Abdul Basit Abdus Samad (Warsh)',
+    style: 'Murattal · Warsh ‘an Nāfi‘',
+    everyAyahFolder: 'warsh/warsh_Abdul_Basit_128kbps',
+    riwayah: 'warsh',
+    hasAudhubillah: false,
+    hasBismillahFile: false,
   },
 ];
 
@@ -2284,6 +2317,86 @@ export async function fetchSurahLanguageOverlay(
 
   const overlay: SurahLanguageOverlay = { versesByNumber };
   void writeDataCache(cacheKey, overlay);
+  return overlay;
+}
+
+export interface SurahWarshOverlay {
+  versesByNumber: Record<number, string>;
+}
+
+export function alignWarshWordsToHafs(
+  warshArabic: string,
+  hafsWords: WordToken[]
+): string[] {
+  const tokens = warshArabic.trim().split(/\s+/).filter(Boolean);
+  const n = hafsWords.length;
+  const m = tokens.length;
+  if (n === 0) return [];
+  if (m === 0) return hafsWords.map((w) => w.arabic);
+  if (m === n) return tokens;
+
+  const aligned: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const start = Math.floor((i * m) / n);
+    const end = Math.floor(((i + 1) * m) / n);
+    if (end > start) {
+      aligned.push(tokens.slice(start, end).join(' '));
+    } else {
+      aligned.push('');
+    }
+  }
+  return aligned;
+}
+
+export async function fetchSurahWarshOverlay(
+  surahId: number
+): Promise<SurahWarshOverlay> {
+  const cacheKey = `https://noor-recite.local/warsh/v1/${surahId}`;
+  const cached = await readDataCache<SurahWarshOverlay>(cacheKey);
+  if (cached && cached.versesByNumber && Object.keys(cached.versesByNumber).length > 0) {
+    return cached;
+  }
+
+  const urls = [
+    `https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranwarsh/${surahId}.json`,
+    `https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/ara-quranwarsh/${surahId}.min.json`,
+  ];
+
+  let chapterList: Array<{ chapter?: number; verse?: number; text?: string }> = [];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = (await res.json()) as {
+          chapter?: Array<{ chapter?: number; verse?: number; text?: string }>;
+        };
+        if (Array.isArray(json?.chapter) && json.chapter.length > 0) {
+          chapterList = json.chapter;
+          break;
+        }
+      }
+    } catch {
+      // try next mirror
+    }
+  }
+
+  if (chapterList.length === 0) {
+    throw new Error(`Unable to load Warsh text for Surah ${surahId}.`);
+  }
+
+  const versesByNumber: Record<number, string> = {};
+  for (const item of chapterList) {
+    const verseNum = Number(item.verse);
+    const text = String(item.text || '').trim();
+    if (verseNum > 0 && text) {
+      versesByNumber[verseNum] = text;
+    }
+  }
+
+  const overlay: SurahWarshOverlay = { versesByNumber };
+  if (Object.keys(versesByNumber).length > 0) {
+    void writeDataCache(cacheKey, overlay);
+  }
   return overlay;
 }
 

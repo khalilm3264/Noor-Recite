@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { TAJWEED_RULES, TAJWEED_STYLE_MAP } from '../data/tajweedRules';
 import { FEATURED_SURAHS, getEveryAyahUrl } from '../data/quranData';
+import { getAyahDisplayArabic, getWordDisplayArabic } from '../data/qiraatData';
 import { Ayah, Reciter, RiwayahId, Surah, TajweedRuleType } from '../types/quran';
 import {
   MicAcousticSample,
@@ -497,8 +498,12 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
                 voicedSec >= 0.4 && capturedPeakRms >= 0.015
                   ? await verifySpokenAudio(
                       blob,
-                      targetAyah.arabic,
-                      targetAyah.words.map((w) => w.arabic)
+                      getAyahDisplayArabic(targetAyah, activeRiwayah, maghrebiOrthography),
+                      targetAyah.words
+                        .map((w) =>
+                          getWordDisplayArabic(targetAyah, w, activeRiwayah, maghrebiOrthography)
+                        )
+                        .filter(Boolean)
                     )
                   : null;
               if (evaluationSeqRef.current !== seq) return;
@@ -1137,7 +1142,7 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
                     dir="rtl"
                     className="font-quran-amiri text-3xl sm:text-4xl leading-[2.0] text-center text-[#022C22] dark:text-[#E6FFF4]"
                   >
-                    {graderAyah.arabic}
+                    {getAyahDisplayArabic(graderAyah, activeRiwayah, maghrebiOrthography)}
                   </div>
 
                   {/* Overall Grade Dial or Prompt */}
@@ -1584,7 +1589,12 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
                                       dir="rtl"
                                       className="font-quran-amiri text-2xl font-bold text-[#003527] dark:text-amber-200"
                                     >
-                                      {ev.word.arabic}
+                                      {getWordDisplayArabic(
+                                        graderAyah,
+                                        ev.word,
+                                        activeRiwayah,
+                                        maghrebiOrthography
+                                      ) || ev.word.arabic}
                                     </span>
                                     <span className="text-xs text-[#0F766E] dark:text-emerald-300 font-medium">
                                       /{ev.word.transliteration}/

@@ -8,7 +8,8 @@ export type AppScreen =
   | 'duas'
   | 'hadiths'
   | 'tajweed'
-  | 'bookmarks';
+  | 'bookmarks'
+  | 'drive';
 export type TranslationLanguage = 'en' | 'hi' | 'ur' | 'bn' | 'ms' | 'ha' | 'ff';
 export type WordHighlightStyle = 'pill' | 'wave' | 'box' | 'glow';
 export type RiwayahId = 'hafs' | 'warsh';
@@ -39,6 +40,7 @@ export interface WordFootnote {
 export interface WordToken {
   id: string;
   arabic: string;
+  arabicWarsh?: string;
   transliteration: string;
   meaning: string;
   meaningHi?: string;
@@ -61,6 +63,7 @@ export interface Ayah {
   verseKey: string; // e.g. "1:1"
   juz: number;
   arabic: string;
+  arabicWarsh?: string;
   transliteration: string;
   translation: string;
   translationHi?: string;
@@ -126,6 +129,7 @@ export interface Reciter {
   name: string;
   style: string;
   everyAyahFolder: string;
+  riwayah?: RiwayahId;
   quranComId?: number;
   hasAudhubillah?: boolean;
   hasBismillahFile?: boolean;

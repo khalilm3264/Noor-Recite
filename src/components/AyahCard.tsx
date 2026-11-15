@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Bookmark, BookOpenText, ChevronDown, ChevronUp, Pause, Play } from 'lucide-react';
 import { Ayah, ReaderSettings, TranslationLanguage, WordToken } from '../types/quran';
 import { TAJWEED_STYLE_MAP } from '../data/tajweedRules';
-import { formatAyahByRiwayah } from '../data/qiraatData';
+import { getWordDisplayArabic } from '../data/qiraatData';
 import { getAyahFootnotes } from '../data/wordFootnotes';
 import {
   getAyahTranslationSegments,
@@ -260,35 +260,37 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
 
           const localizedMeaning = getWordMeaningText(word, requestedLang);
 
-          return (
-            <button
-              key={word.id}
-              type="button"
-              data-active-word={isWordVocalized ? 'true' : undefined}
-              onClick={() => onSelectWord(ayah, word, idx)}
-              title={`${word.transliteration} · ${localizedMeaning}`}
-              className={`min-h-[44px] px-2.5 py-0.5 inline-flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
-                isWordVocalized
-                  ? activeWordClasses
-                  : isWordSelected
-                  ? 'rounded-full bg-[#0F766E]/10 dark:bg-emerald-400/15 border border-[#0F766E]/40 dark:border-emerald-300/40 text-[#022C22] dark:text-[#E6FFF4]'
-                  : 'rounded-full border-[1.5px] border-transparent hover:bg-[#064E3B]/[0.05] dark:hover:bg-emerald-400/10 ' +
-                    (tajweedStyle
-                      ? tajweedStyle.wordTint
-                      : 'text-[#022C22] dark:text-[#E6FFF4]')
-              }`}
-            >
-              <span>
-                {formatAyahByRiwayah(
-                  ayah.verseKey,
-                  word.arabic,
-                  settings.riwayah,
-                  settings.maghrebiOrthography
-                )}
-              </span>
-            </button>
-          );
-        })}
+              const displayedArabic = getWordDisplayArabic(
+                ayah,
+                word,
+                settings.riwayah,
+                settings.maghrebiOrthography
+              );
+              if (settings.riwayah === 'warsh' && word.arabicWarsh === '') {
+                return null;
+              }
+              return (
+                <button
+                  key={word.id}
+                  type="button"
+                  data-active-word={isWordVocalized ? 'true' : undefined}
+                  onClick={() => onSelectWord(ayah, word, idx)}
+                  title={`${word.transliteration} · ${localizedMeaning}`}
+                  className={`min-h-[44px] px-2.5 py-0.5 inline-flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                    isWordVocalized
+                      ? activeWordClasses
+                      : isWordSelected
+                      ? 'rounded-full bg-[#0F766E]/10 dark:bg-emerald-400/15 border border-[#0F766E]/40 dark:border-emerald-300/40 text-[#022C22] dark:text-[#E6FFF4]'
+                      : 'rounded-full border-[1.5px] border-transparent hover:bg-[#064E3B]/[0.05] dark:hover:bg-emerald-400/10 ' +
+                        (tajweedStyle
+                          ? tajweedStyle.wordTint
+                          : 'text-[#022C22] dark:text-[#E6FFF4]')
+                  }`}
+                >
+                  <span>{displayedArabic}</span>
+                </button>
+              );
+            })}
 
         {/* Ornate Ayah Number Terminal */}
         <span

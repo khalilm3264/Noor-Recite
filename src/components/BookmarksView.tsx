@@ -11,8 +11,9 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { BookmarkCollection, BookmarkItem, TranslationLanguage } from '../types/quran';
+import { BookmarkCollection, BookmarkItem, RiwayahId, TranslationLanguage } from '../types/quran';
 import { TAJWEED_RULES } from '../data/tajweedRules';
+import { formatAyahByRiwayah } from '../data/qiraatData';
 import { RubElHizbBadge } from './RubElHizbIcon';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
 
@@ -28,6 +29,8 @@ interface BookmarksViewProps {
   onChangeDailyGoal: (goal: number) => void;
   onJumpToVerse: (surahId: number, ayahNumber: number, autoPlay?: boolean) => void;
   onRemoveBookmark: (verseKey: string) => void;
+  riwayah?: RiwayahId;
+  maghrebiOrthography?: boolean;
 }
 
 type HubTab = 'saved' | 'collections' | 'rules';
@@ -51,6 +54,8 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onChangeDailyGoal,
   onJumpToVerse,
   onRemoveBookmark,
+  riwayah = 'hafs',
+  maghrebiOrthography = false,
 }) => {
   const [activeTab, setActiveTab] = useState<HubTab>('saved');
   const [searchQuery, setSearchQuery] = useState('');
@@ -500,7 +505,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                       dir="rtl"
                       className="font-quran-amiri text-2xl sm:text-3xl leading-[2.0] text-[#022C22] dark:text-[#E6FFF4]"
                     >
-                      {bm.arabic}
+                      {formatAyahByRiwayah(bm.verseKey, bm.arabic, riwayah, maghrebiOrthography)}
                     </p>
 
                     <p
