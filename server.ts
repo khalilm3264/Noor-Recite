@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from './server/aiProtection.ts';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -17,10 +18,23 @@ const ai = process.env.GEMINI_API_KEY
       apiKey: process.env.GEMINI_API_KEY,
       httpOptions: {
         apiVersion: 'v1beta',
+        // Retries are explicit below so every attempt consumes the shared budget.
+        retryOptions: { attempts: 1 },
+        timeout: 120_000,
         headers: { 'User-Agent': 'aistudio-build' },
       },
     })
   : null;
+
+const aiCallBudget = new AiCallBudget(
+  positiveInteger(process.env.AI_DAILY_CALL_LIMIT, 300),
+  positiveInteger(process.env.AI_CONCURRENT_CALL_LIMIT, 3),
+);
+
+function generateAiContent(request: Parameters<GoogleGenAI['models']['generateContent']>[0]) {
+  if (!ai) throw Object.assign(new Error('AI service is not configured.'), { status: 503 });
+  return aiCallBudget.run(() => ai.models.generateContent(request));
+}
 
 const ttsCache = new Map<string, Buffer>();
 const MAX_CACHE_ENTRIES = 120;
@@ -231,7 +245,7 @@ async function synthesizeAudioWithRetry(
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const response = await ai.models.generateContent({
+      const response = await generateAiContent({
         model: 'gemini-3.8-flash-lite-tts',
         contents: [
           {
@@ -276,7 +290,9 @@ async function synthesizeAudioWithRetry(
         typeof (err as { status?: unknown }).status === 'number'
           ? (err as { status: number }).status
           : 500;
-      const isTransient = status === 429 || status >= 500;
+      const isTransient = !(err instanceof Error && err.message.startsWith('The daily AI allowance')) &&
+        !(err instanceof Error && err.message.startsWith('AI services are busy')) &&
+        (status === 429 || status >= 500);
       if (!isTransient || attempt === maxRetries) {
         throw err;
       }
@@ -290,6 +306,20 @@ async function synthesizeAudioWithRetry(
 
 async function startServer() {
   const app = express();
+  // Only trust proxy addresses explicitly configured by the deployment operator.
+  // Never blindly trust arbitrary X-Forwarded-For headers from public clients.
+  if (process.env.TRUSTED_PROXY_CIDRS) {
+    app.set('trust proxy', process.env.TRUSTED_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean));
+  }
+  const aiPaths = ['/api/tts', '/api/grade-recitation', '/api/translate-batch'];
+  app.post(
+    aiPaths,
+    sameOriginOnly(process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : undefined),
+    ...createAiRequestLimits(
+      positiveInteger(process.env.AI_REQUESTS_PER_MINUTE, 30),
+      positiveInteger(process.env.AI_REQUESTS_PER_DAY, 200),
+    ),
+  );
   app.use(express.json({ limit: '6mb' }));
 
   app.get('/api/tts/health', (_req, res) => {
@@ -379,13 +409,17 @@ async function startServer() {
           .json({ error: 'Audio data and expected Arabic text are required.' });
       }
 
+      if (expectedArabic.length > 4000 || expectedWords.length > 300 || expectedWords.some((word: string) => word.length > 150)) {
+        return res.status(400).json({ error: 'The recitation passage is too long. Please submit a shorter passage.' });
+      }
+
       if (!ai) {
         return res.status(503).json({ error: 'Voice evaluation service unavailable.' });
       }
 
       let transcript = '';
       try {
-        const transcribeResponse = await ai.models.generateContent({
+        const transcribeResponse = await generateAiContent({
           model: 'gemini-3.5-transcribe',
           contents: {
             parts: [
@@ -407,7 +441,7 @@ async function startServer() {
       }
 
       if (!transcript) {
-        const multimodalResponse = await ai.models.generateContent({
+        const multimodalResponse = await generateAiContent({
           model: 'gemini-4-hydrogen',
           contents: {
             parts: [
@@ -476,6 +510,14 @@ async function startServer() {
         )
         .slice(0, 45);
 
+      if (items.some((item: { text: string; arabic?: unknown }) =>
+        item.text.length > 6000 ||
+        (item.arabic !== undefined && (typeof item.arabic !== 'string' || item.arabic.length > 6000))
+      ) || items.reduce((total: number, item: { text: string; arabic?: string }) =>
+        total + item.text.length + (item.arabic?.length ?? 0), 0) > 40_000) {
+        return res.status(400).json({ error: 'Translation content is too long or has invalid Arabic context.' });
+      }
+
       const resolved: Record<string, string> = {};
       const missing: Array<{ id: string; text: string; arabic?: string }> = [];
 
@@ -500,7 +542,7 @@ async function startServer() {
           ...(m.arabic ? { arabicContext: m.arabic.trim() } : {}),
         }));
 
-        const response = await ai.models.generateContent({
+        const response = await generateAiContent({
           model: 'gemini-4-hydrogen',
           contents: `Translate each JSON item's "source" text into ${langDesc}\nPreserve proper Islamic names (Allah, Muhammad, Jibril, etc.) and keep formatting concise and accurate. Return a JSON array matching every input "id".\n\n${JSON.stringify(
             promptPayload

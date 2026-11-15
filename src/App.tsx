@@ -1,3 +1,4 @@
+import { WARSH_PREVIEW_NOTICE } from './data/qiraatData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppScreen,
@@ -3064,6 +3065,12 @@ export default function App() {
                     mainScrollRef.current?.scrollTo({ top: 0 });
                   }}
                 />
+
+                {settings.riwayah === 'warsh' && (
+                  <p role="note" className="rounded-xl border border-amber-500/30 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950 dark:bg-amber-950/20 dark:text-amber-200">
+                    {WARSH_PREVIEW_NOTICE}
+                  </p>
+                )}
 
                 <DailyGoalProgressBar
                   versesRecitedCount={versesRecitedCount}

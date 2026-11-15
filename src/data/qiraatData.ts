@@ -1,5 +1,7 @@
 import { RiwayahId } from '../types/quran';
 
+export const WARSH_PREVIEW_NOTICE = 'Limited Warsh text preview: only 1:4 and 2:9 are adjusted. Other verses retain the base Ḥafṣ text, and reader audio uses your selected reciter. This is not a complete Warsh Muṣḥaf.';
+
 export interface RiwayahProfile {
   id: RiwayahId;
   name: string;
