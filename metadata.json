@@ -1,0 +1,10 @@
+{
+  "name": "Noor Recite",
+  "description": "A reverent, luminous Quranic Arabic learning, reading, synchronized word-by-word recitation, and tajweed study companion.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

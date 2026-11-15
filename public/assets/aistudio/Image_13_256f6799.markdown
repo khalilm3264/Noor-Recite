@@ -1,0 +1,233 @@
+---
+name: Noor Recite
+colors:
+  surface: '#e6fff4'
+  surface-dim: '#bae3d3'
+  surface-bright: '#e6fff4'
+  surface-container-lowest: '#ffffff'
+  surface-container-low: '#d3fded'
+  surface-container: '#cdf7e7'
+  surface-container-high: '#c8f1e1'
+  surface-container-highest: '#c2ebdc'
+  on-surface: '#002018'
+  on-surface-variant: '#404944'
+  inverse-surface: '#0f372c'
+  inverse-on-surface: '#d0faea'
+  outline: '#707974'
+  outline-variant: '#bfc9c3'
+  surface-tint: '#2b6954'
+  primary: '#003527'
+  on-primary: '#ffffff'
+  primary-container: '#064e3b'
+  on-primary-container: '#80bea6'
+  inverse-primary: '#95d3ba'
+  secondary: '#904d00'
+  on-secondary: '#ffffff'
+  secondary-container: '#fe932c'
+  on-secondary-container: '#663500'
+  tertiary: '#003430'
+  on-tertiary: '#ffffff'
+  tertiary-container: '#004d47'
+  on-tertiary-container: '#6ac0b6'
+  error: '#ba1a1a'
+  on-error: '#ffffff'
+  error-container: '#ffdad6'
+  on-error-container: '#93000a'
+  primary-fixed: '#b0f0d6'
+  primary-fixed-dim: '#95d3ba'
+  on-primary-fixed: '#002117'
+  on-primary-fixed-variant: '#0b513d'
+  secondary-fixed: '#ffdcc3'
+  secondary-fixed-dim: '#ffb77d'
+  on-secondary-fixed: '#2f1500'
+  on-secondary-fixed-variant: '#6e3900'
+  tertiary-fixed: '#9cf2e8'
+  tertiary-fixed-dim: '#80d5cb'
+  on-tertiary-fixed: '#00201d'
+  on-tertiary-fixed-variant: '#00504a'
+  background: '#e6fff4'
+  on-background: '#002018'
+  surface-variant: '#c2ebdc'
+typography:
+  quran-display:
+    fontFamily: Amiri
+    fontSize: 38px
+    fontWeight: '700'
+    lineHeight: 72px
+  quran-display-mobile:
+    fontFamily: Amiri
+    fontSize: 28px
+    fontWeight: '700'
+    lineHeight: 56px
+  quran-body:
+    fontFamily: Amiri
+    fontSize: 26px
+    fontWeight: '400'
+    lineHeight: 52px
+  quran-body-mobile:
+    fontFamily: Amiri
+    fontSize: 22px
+    fontWeight: '400'
+    lineHeight: 44px
+  headline-lg:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 32px
+    fontWeight: '700'
+    lineHeight: 40px
+    letterSpacing: -0.02em
+  headline-lg-mobile:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 24px
+    fontWeight: '700'
+    lineHeight: 32px
+    letterSpacing: -0.01em
+  headline-md:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 20px
+    fontWeight: '600'
+    lineHeight: 28px
+  body-lg:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 16px
+    fontWeight: '400'
+    lineHeight: 26px
+  body-md:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 14px
+    fontWeight: '400'
+    lineHeight: 22px
+  transliteration:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 14px
+    fontWeight: '500'
+    lineHeight: 22px
+    letterSpacing: 0.01em
+  label-md:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 12px
+    fontWeight: '600'
+    lineHeight: 16px
+    letterSpacing: 0.04em
+  label-sm:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 11px
+    fontWeight: '500'
+    lineHeight: 14px
+    letterSpacing: 0.02em
+rounded:
+  sm: 0.25rem
+  DEFAULT: 0.5rem
+  md: 0.75rem
+  lg: 1rem
+  xl: 1.5rem
+  full: 9999px
+spacing:
+  gutter: 1rem
+  gutter-desktop: 1.5rem
+  margin: 1rem
+  margin-desktop: 2rem
+  space-xs: 0.25rem
+  space-sm: 0.5rem
+  space-md: 1rem
+  space-lg: 1.5rem
+  space-xl: 2.5rem
+---
+
+## Brand & Style
+
+The design system establishes a reverent, tranquil, and intellectually clear environment tailored for Quranic contemplation and auditory recitation. It balances solemn spiritual depth with state-of-the-art acoustic clarity.
+
+### Personality & Demographics
+- **Tone:** Reverent, luminous, disciplined, peaceful, and scholarly.
+- **Audience:** Everyday reciters, students of tajweed and memorization, and scholarly readers seeking a distraction-free, aesthetically sanctified interface.
+- **Aesthetic Direction:** Modern Spiritual Luxury. A fusion of contemporary minimalism with sacred Islamic architectural poise. It replaces heavy, dated ornamentation with restrained geometric framing, micro-embellished dividers, and rhythmic typography.
+
+### Design Principles
+1. **Sacred Serenity (Sakina):** Visual noise is eliminated to maintain meditative focus. Whitespace and tonal depth protect the mind from cognitive exhaustion.
+2. **Textual Primacy:** The Quranic text occupies absolute visual sovereignty. English translations, tajweed markers, and playback metadata serve as quiet, harmonized companions.
+3. **Synchronized Illumination:** Audio-driven interactions evoke radiant luminescence ("Noor") through soft emerald washes and warm amber halos rather than harsh neon alerts.
+
+## Colors
+
+The palette draws directly from historic Quranic manuscript illumination: rich forest and cypress greens, aged and radiant gold leaf, set against cool ivory and crystalline parchment backdrops.
+
+### Palette Architecture
+- **Primary (`#064E3B`):** Deep Forest Emerald. Anchor for structural navigation, primary app bars, chapter markers, and core active states.
+- **Secondary (`#D97706`):** Warm Amber Gold. Used for radiant interaction highlights, active tajweed rules, audio scrub heads, and verse completion seals.
+- **Tertiary (`#0F766E`):** Persian Teal. Handles auxiliary meta-information, secondary audio cues, translation headers, and subtle geometric tinting.
+- **Neutral (`#022C22`):** Night Cypress. Used as the anchor for deep contrast text in light mode and foundation surface layering in dark mode.
+
+### Functional Roles & Contrast
+- **Canvas & Surface (Light Mode):** Background is `#FBFBFA` (warm alabaster parchment) with card tiers layered in `#FFFFFF`. Muted dividers use `#E2E8F0` with a 20% emerald wash.
+- **Canvas & Surface (Dark Mode):** Base canvas is `#022C22` transitioning to `#064E3B` (at 20% opacity over `#0B1E19`) for elevated verse cards, maintaining deep contrast without blinding glare.
+- **Active Synchronized Recitation:** 
+  - Word chip base: `rgba(6, 78, 59, 0.08)`.
+  - Word chip active/playing: `rgba(217, 119, 6, 0.12)` background with a crisp border stroke of `#D97706` and an amber-gold ambient glow (`rgba(245, 158, 11, 0.25)`).
+
+## Typography
+
+The typographical hierarchy is bi-directional and dual-script: classical Arabic calligraphy rules govern the Quranic text, while modern Latin geometric typography delivers crystalline translations, tajweed guides, and control labels.
+
+### Typographic Roles
+- **Arabic Text (Amiri / Scheherazade New):** Requires generous vertical line clearance (`lineHeight` nearly 2x the `fontSize`) to accommodate complex diacritics (harakat, sukun, shaddah) and tajweed stops without vertical clipping.
+- **Latin Translation & Metadata (Plus Jakarta Sans):** Selected for its friendly, wide apertures and crisp readability at compact sizes. It offsets the heavy flourishes of the Arabic script with geometric clarity.
+- **Transliteration:** Rendered with italicized weighting and gentle tracking to clearly distinguish phonetic study text from standard commentary.
+
+## Layout & Spacing
+
+The layout model is built on an 8pt vertical grid combined with a single-column fluid card layout for mobile touchscreens, expanding to a stabilized max-width container on larger viewport formats.
+
+### Layout Model
+- **Reading Canvas:** The reading view adheres strictly to a centered safe reading channel (max 680px width) ensuring optimal saccadic eye movement across both Arabic right-to-left (RTL) reading and Latin left-to-right (LTR) translation tracks.
+- **Responsive Adaptations:**
+  - **Mobile (< 640px):** Single-column layout. Margin of `1rem`, gutter of `1rem`. Floating bottom player dock with compact action tray.
+  - **Tablet / Split View (640px – 1024px):** Dual-pane capabilities (Ayah reader left, tafsir/lexicon right). Margin expands to `1.5rem`.
+  - **Desktop (> 1024px):** Fixed reading frame centered at 720px with auxiliary recitation drawers on either side.
+
+### Spacing Rhythm
+Vertical padding within Ayah cards utilizes `space-lg` to create rhythmic breathing space between the sacred Arabic script, the pronunciation guide, and the English meaning.
+
+## Elevation & Depth
+
+Visual hierarchy is maintained via gentle, illuminated layering rather than harsh industrial drop-shadows.
+
+### Surface Tiers
+- **Tier 0 (Parchment Base):** `#FBFBFA` flat background.
+- **Tier 1 (Resting Ayah Card):** Pure white surface bounded by a subtle `1px` stroke of `rgba(6, 78, 59, 0.06)`. Diffused ambient shadow: `0 4px 20px -2px rgba(2, 44, 34, 0.04)`.
+- **Tier 2 (Active Recitation Card):** Elevated using an amber-tinted shadow: `0 8px 30px -4px rgba(217, 119, 6, 0.08)`, framed by a delicate border in `rgba(217, 119, 6, 0.3)`.
+- **Tier 3 (Floating Media Deck & Sheets):** Frosted glassmorphism (`backdrop-filter: blur(16px)`) with a `rgba(255, 255, 255, 0.88)` base fill in light mode or `rgba(2, 44, 34, 0.82)` in dark mode, supported by a 1px top highlight stroke.
+
+## Shapes
+
+The geometric silhouette balances architectural structure with physical comfort in hand. 
+
+### Corner Radius System
+- **Level 2 (Default - 0.5rem / 8px):** Standard interactive elements including input fields, audio control buttons, and dropdown menus.
+- **Large (1rem / 16px):** Primary Ayah cards, modal dialogs, and tafsir panels.
+- **Pill (Full Rounding):** Word-by-word synchronized chips, bookmark tags, tajweed rule indicator badges, and audio scrub thumbs.
+- **Islamic Geometry Accents:** Surah header banners and card divider terminals feature discreet 8-point star (Rub el Hizb) micro-framing and stepped geometric filigree.
+
+## Components
+
+### 1. Ayah Card
+- **Structure:** Vertical container with Surah/Ayah badge header, sacred Arabic text block, transliteration text, and English translation block.
+- **Resting State:** White container, 16px corner radius, hairline green-slate border.
+- **Active Recitation State:** Left-edge accent spine (3px solid `#D97706`), soft emerald background gradient wash (`linear-gradient(180deg, rgba(6,78,59,0.02) 0%, rgba(217,119,6,0.03) 100%)`).
+
+### 2. Synchronized Word Pills
+- **Nature:** High-precision touch targets wrapping each Arabic word for recitation tracking.
+- **Inactive:** Transparent background, zero border, comfortable tap target (min 44px vertical height).
+- **Active / Vocalized:** Soft rounded pill shape with `0.25rem` padding, filled with `rgba(6, 78, 59, 0.08)`, bounded by a `1.5px` border in `#D97706`, accompanied by an ambient gold text glow (`text-shadow: 0 0 12px rgba(245, 158, 11, 0.3)`).
+
+### 3. Audio Waveform & Player Deck
+- **Container:** Floating bar anchored above the bottom navigation bar with 20px margin, featuring 24px corner radius and glassmorphism backdrop blur.
+- **Waveform:** Dynamic amplitude bars colored in `#0F766E` for unplayed tracks, transitioning to `#D97706` for played duration. Scrub head is a warm gold pill with current timestamp tooltip.
+- **Playback Controls:** Primary Play/Pause is a 56px circle in deep emerald (`#064E3B`) with a warm gold icon (`#FEF3C7`). Secondary controls (rewind 5s, repeat ayah, tajweed speed) use subtle ghost icons.
+
+### 4. Surah & Juz Navigation Chips
+- **Style:** Compact pill chips featuring dual labels (Arabic name + English transliteration).
+- **Default State:** Alabaster fill, 1px border in `rgba(6, 78, 59, 0.1)`.
+- **Selected State:** Solid `#064E3B` fill, `#FFFFFF` typography, with a `#D97706` dot indicator.
+
+### 5. Tajweed & Lexicon Cards
+- **Display:** Slide-up bottom sheets utilizing `rounded-xl` top edges. Tonal color tags (crimson for ghunnah, cobalt for qalqalah, amber for idgham) applied as soft translucent pill badges.

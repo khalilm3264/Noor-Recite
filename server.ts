@@ -1,0 +1,581 @@
+import 'dotenv/config';
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const PORT = Number(process.env.PORT || 3000);
+const ALLOWED_VOICES = new Set(['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']);
+
+const ai = process.env.GEMINI_API_KEY
+  ? new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        apiVersion: 'v1beta',
+        headers: { 'User-Agent': 'aistudio-build' },
+      },
+    })
+  : null;
+
+const ttsCache = new Map<string, Buffer>();
+const MAX_CACHE_ENTRIES = 120;
+
+const translationCache = new Map<string, string>();
+const MAX_TRANSLATION_CACHE = 800;
+
+function setCachedAudio(key: string, buffer: Buffer) {
+  if (ttsCache.has(key)) {
+    ttsCache.delete(key);
+  } else if (ttsCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = ttsCache.keys().next().value;
+    if (oldestKey) ttsCache.delete(oldestKey);
+  }
+  ttsCache.set(key, buffer);
+}
+
+function setCachedTranslation(key: string, value: string) {
+  if (translationCache.has(key)) {
+    translationCache.delete(key);
+  } else if (translationCache.size >= MAX_TRANSLATION_CACHE) {
+    const oldestKey = translationCache.keys().next().value;
+    if (oldestKey) translationCache.delete(oldestKey);
+  }
+  translationCache.set(key, value);
+}
+
+function normalizeArabicText(raw: string): string {
+  return raw
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(/\u0640/g, '')
+    .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0624/g, '\u0648')
+    .replace(/\u0626/g, '\u064A')
+    .replace(/[^\u0621-\u064A\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const prev = new Array<number>(b.length + 1);
+  const curr = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+  return prev[b.length];
+}
+
+function tokenSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const maxLen = Math.max(a.length, b.length);
+  return Math.max(0, 1 - levenshtein(a, b) / maxLen);
+}
+
+function evaluateSpokenTranscript(
+  transcriptRaw: string,
+  expectedArabic: string,
+  expectedWords: string[]
+) {
+  const cleanedTranscript = transcriptRaw.trim();
+  const isSilentMarker =
+    !cleanedTranscript ||
+    /^\[?(silence|noise|unintelligible|music|inaudible|background noise)\]?$/i.test(
+      cleanedTranscript
+    );
+
+  const lettersOnly = cleanedTranscript.replace(/[^\p{L}]/gu, '');
+  const arabicLetters = (cleanedTranscript.match(/[\u0621-\u064A]/g) || []).length;
+  const arabicLetterRatio =
+    lettersOnly.length > 0 ? arabicLetters / lettersOnly.length : 0;
+
+  const normExpected = normalizeArabicText(expectedArabic);
+  const normTranscript = normalizeArabicText(cleanedTranscript);
+  const transcriptTokens = normTranscript ? normTranscript.split(' ') : [];
+
+  const targetWords = (
+    expectedWords.length > 0 ? expectedWords : expectedArabic.split(/\s+/)
+  )
+    .map((w) => normalizeArabicText(w))
+    .filter(Boolean);
+
+  const isArabicSpeech =
+    !isSilentMarker && arabicLetters >= 2 && arabicLetterRatio >= 0.38;
+
+  if (!isArabicSpeech || targetWords.length === 0 || transcriptTokens.length === 0) {
+    return {
+      transcript: cleanedTranscript,
+      isArabicSpeech: false,
+      wordMatchRatio: 0,
+      charSimilarity: 0,
+      perWordAccuracy: targetWords.map(() => 0),
+      matchedWordCount: 0,
+      expectedWordCount: targetWords.length,
+    };
+  }
+
+  // Monotonic ordered alignment from expected words into spoken Arabic tokens
+  const perWordAccuracy: number[] = [];
+  let cursor = 0;
+  let matchedWordCount = 0;
+
+  for (let i = 0; i < targetWords.length; i++) {
+    const target = targetWords[i];
+    let bestSim = 0;
+    let bestIdx = -1;
+
+    // Prefer forward match within window, then fallback across remaining/nearby tokens
+    const windowEnd = Math.min(transcriptTokens.length, cursor + 4);
+    for (let j = cursor; j < windowEnd; j++) {
+      const sim = tokenSimilarity(target, transcriptTokens[j]);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestIdx = j;
+      }
+      // Also test merged adjacent spoken tokens (e.g. separated prefix "ال" or "ب")
+      if (j + 1 < transcriptTokens.length) {
+        const mergedSim = tokenSimilarity(
+          target,
+          `${transcriptTokens[j]}${transcriptTokens[j + 1]}`
+        );
+        if (mergedSim > bestSim) {
+          bestSim = mergedSim;
+          bestIdx = j + 1;
+        }
+      }
+    }
+
+    // Also allow splitting if ASR merged two short words into one token
+    if (bestSim < 0.55) {
+      for (let j = Math.max(0, cursor - 1); j < transcriptTokens.length; j++) {
+        const sim = tokenSimilarity(target, transcriptTokens[j]);
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestIdx = j;
+        }
+      }
+    }
+
+    if (bestIdx >= cursor && bestSim >= 0.5) {
+      cursor = Math.min(transcriptTokens.length, bestIdx + 1);
+    }
+    if (bestSim >= 0.55) {
+      matchedWordCount += 1;
+    }
+    perWordAccuracy.push(Math.round(bestSim * 100));
+  }
+
+  const wordMatchRatio = matchedWordCount / Math.max(1, targetWords.length);
+  const rawCharSim = tokenSimilarity(
+    normExpected.replace(/\s+/g, ''),
+    normTranscript.replace(/\s+/g, '')
+  );
+
+  // Penalize rambling extra unrelated words beyond target verse length
+  const lengthRatioPenalty =
+    normTranscript.length > normExpected.length * 1.45
+      ? Math.max(0.4, (normExpected.length * 1.25) / normTranscript.length)
+      : 1;
+
+  const charSimilarity = Number((rawCharSim * lengthRatioPenalty).toFixed(3));
+
+  return {
+    transcript: cleanedTranscript,
+    isArabicSpeech: true,
+    wordMatchRatio: Number(wordMatchRatio.toFixed(3)),
+    charSimilarity,
+    perWordAccuracy,
+    matchedWordCount,
+    expectedWordCount: targetWords.length,
+  };
+}
+
+const TARGET_LANGUAGE_INSTRUCTIONS: Record<string, string> = {
+  bn: 'Bengali (Bangla) using natural, reverent Islamic scholarly Bengali script (বাংলা).',
+  ms: 'Bahasa Melayu / Bahasa Indonesia (standard Nusantara Islamic phrasing understood in both Malaysia and Indonesia).',
+  ha: "Pan-Hausa (standard Boko orthography using hooked letters ɓ, ɗ, ƙ, 'y as appropriate, natural West African Islamic register).",
+  ff: 'Fulfulde / Pulaar (standard West African Fula orthography using ɓ, ɗ, ƴ, ŋ accurately, natural Islamic scholarly register).',
+  hi: 'Hindi (Devanagari script, clear Hindustani Islamic register).',
+  ur: 'Urdu (Nastaliq-compatible Urdu script, natural Islamic register).',
+};
+
+async function synthesizeAudioWithRetry(
+  text: string,
+  voiceName: string,
+  style: string,
+  maxRetries = 2
+): Promise<Buffer> {
+  if (!ai) {
+    throw Object.assign(new Error('Speech synthesis service is not configured.'), {
+      status: 503,
+    });
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash-lite-tts',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text,
+                speechMetadata: { style },
+              },
+            ],
+          },
+        ],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName,
+              },
+            },
+          },
+        },
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      const audioPart = parts.find((part) => part.inlineData?.data);
+      const base64Audio = audioPart?.inlineData?.data;
+
+      if (!base64Audio) {
+        throw Object.assign(new Error('No audio returned by synthesis model.'), {
+          status: 502,
+        });
+      }
+
+      return Buffer.from(base64Audio, 'base64');
+    } catch (err: unknown) {
+      lastError = err;
+      const status =
+        typeof err === 'object' &&
+        err !== null &&
+        'status' in err &&
+        typeof (err as { status?: unknown }).status === 'number'
+          ? (err as { status: number }).status
+          : 500;
+      const isTransient = status === 429 || status >= 500;
+      if (!isTransient || attempt === maxRetries) {
+        throw err;
+      }
+      const delayMs = 350 * Math.pow(2.5, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError;
+}
+
+async function startServer() {
+  const app = express();
+  app.use(express.json({ limit: '6mb' }));
+
+  app.get('/api/tts/health', (_req, res) => {
+    res.json({
+      ok: Boolean(ai),
+      model: 'gemini-3.8-flash-lite-tts',
+      voices: Array.from(ALLOWED_VOICES),
+    });
+  });
+
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const rawText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+      if (!rawText) {
+        return res.status(400).json({ error: 'Text is required for speech synthesis.' });
+      }
+      if (rawText.length > 3500) {
+        return res.status(400).json({ error: 'Text exceeds maximum TTS length.' });
+      }
+
+      if (!ai) {
+        return res.status(503).json({
+          error: 'Speech synthesis service is not configured.',
+        });
+      }
+
+      const requestedVoice =
+        typeof req.body?.voiceName === 'string' && ALLOWED_VOICES.has(req.body.voiceName)
+          ? req.body.voiceName
+          : 'Charon';
+
+      const style =
+        typeof req.body?.style === 'string' && req.body.style.trim()
+          ? req.body.style.trim().slice(0, 200)
+          : 'calm, reverent, clear classical Arabic Qari articulation with gentle measured pacing';
+
+      const cacheKey = `${requestedVoice}::${style}::${rawText}`;
+      const cached = ttsCache.get(cacheKey);
+      if (cached) {
+        ttsCache.delete(cacheKey);
+        ttsCache.set(cacheKey, cached);
+        res.setHeader('Content-Type', 'audio/wav');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(cached);
+      }
+
+      const wavBuffer = await synthesizeAudioWithRetry(rawText, requestedVoice, style);
+      setCachedAudio(cacheKey, wavBuffer);
+
+      res.setHeader('Content-Type', 'audio/wav');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(wavBuffer);
+    } catch (err: unknown) {
+      const status =
+        typeof err === 'object' &&
+        err !== null &&
+        'status' in err &&
+        typeof (err as { status?: unknown }).status === 'number'
+          ? (err as { status: number }).status
+          : 500;
+      const message =
+        err instanceof Error ? err.message : 'Failed to synthesize Arabic voice.';
+      console.error('TTS error:', status, message);
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: message,
+      });
+    }
+  });
+
+  // Strict spoken-word verification for the Voice Grader & Tajweed Self-Test
+  app.post('/api/grade-recitation', async (req, res) => {
+    try {
+      const audioBase64 =
+        typeof req.body?.audioBase64 === 'string' ? req.body.audioBase64.trim() : '';
+      const rawMime =
+        typeof req.body?.mimeType === 'string' ? req.body.mimeType.trim() : 'audio/webm';
+      const cleanMimeType = rawMime.split(';')[0].trim() || 'audio/webm';
+      const expectedArabic =
+        typeof req.body?.expectedArabic === 'string' ? req.body.expectedArabic.trim() : '';
+      const expectedWords = Array.isArray(req.body?.words)
+        ? req.body.words.filter((w: unknown): w is string => typeof w === 'string')
+        : [];
+
+      if (!audioBase64 || !expectedArabic) {
+        return res
+          .status(400)
+          .json({ error: 'Audio data and expected Arabic text are required.' });
+      }
+
+      if (!ai) {
+        return res.status(503).json({ error: 'Voice evaluation service unavailable.' });
+      }
+
+      let transcript = '';
+      try {
+        const transcribeResponse = await ai.models.generateContent({
+          model: 'gemini-3.5-transcribe',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMimeType,
+                  data: audioBase64,
+                },
+              },
+              {
+                text: 'Transcribe the spoken words in this audio verbatim in their original language and script.',
+              },
+            ],
+          },
+        });
+        transcript = (transcribeResponse.text ?? '').trim();
+      } catch (asrErr) {
+        console.warn('gemini-3.5-transcribe fallback triggered:', asrErr);
+      }
+
+      if (!transcript) {
+        const multimodalResponse = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMimeType,
+                  data: audioBase64,
+                },
+              },
+              {
+                text: 'Listen carefully to this audio and transcribe verbatim ONLY what is clearly spoken. Keep the original spoken language and script (write Arabic words in Arabic script if Arabic is spoken; write English or other speech in its own script without translating to Arabic). If the audio is silent, humming, breathing, tone/beeps, or unintelligible noise, respond only with "[silence]". Never guess or autocomplete expected text that was not spoken.',
+              },
+            ],
+          },
+          config: {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          },
+        });
+        transcript = (multimodalResponse.text ?? '').trim();
+      }
+
+      const result = evaluateSpokenTranscript(transcript, expectedArabic, expectedWords);
+      return res.json(result);
+    } catch (err: unknown) {
+      const status =
+        typeof err === 'object' &&
+        err !== null &&
+        'status' in err &&
+        typeof (err as { status?: unknown }).status === 'number'
+          ? (err as { status: number }).status
+          : 500;
+      const message =
+        err instanceof Error ? err.message : 'Unable to evaluate spoken audio.';
+      console.error('Recitation grade error:', status, message);
+      return res.status(status >= 400 && status < 600 ? status : 500).json({
+        error: message,
+      });
+    }
+  });
+
+  // Batch translation endpoint for Fulfulde (Fula) and multi-screen scholarly translations
+  app.post('/api/translate-batch', async (req, res) => {
+    try {
+      const targetLang =
+        typeof req.body?.targetLang === 'string' ? req.body.targetLang.trim() : '';
+      const langDesc = TARGET_LANGUAGE_INSTRUCTIONS[targetLang];
+      const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+
+      if (!langDesc) {
+        return res.status(400).json({ error: 'Unsupported target translation language.' });
+      }
+      if (!rawItems.length || rawItems.length > 45) {
+        return res
+          .status(400)
+          .json({ error: 'Provide between 1 and 45 items to translate.' });
+      }
+
+      const items = rawItems
+        .filter(
+          (it: unknown): it is { id: string; text: string; arabic?: string } =>
+            typeof it === 'object' &&
+            it !== null &&
+            typeof (it as { id?: unknown }).id === 'string' &&
+            typeof (it as { text?: unknown }).text === 'string' &&
+            (it as { text: string }).text.trim().length > 0
+        )
+        .slice(0, 45);
+
+      const resolved: Record<string, string> = {};
+      const missing: Array<{ id: string; text: string; arabic?: string }> = [];
+
+      for (const item of items) {
+        const key = `${targetLang}::${item.text.trim()}`;
+        const hit = translationCache.get(key);
+        if (hit) {
+          resolved[item.id] = hit;
+        } else {
+          missing.push(item);
+        }
+      }
+
+      if (missing.length > 0) {
+        if (!ai) {
+          return res.status(503).json({ error: 'Translation service unavailable.' });
+        }
+
+        const promptPayload = missing.map((m) => ({
+          id: m.id,
+          source: m.text.trim(),
+          ...(m.arabic ? { arabicContext: m.arabic.trim() } : {}),
+        }));
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: `Translate each JSON item's "source" text into ${langDesc}\nPreserve proper Islamic names (Allah, Muhammad, Jibril, etc.) and keep formatting concise and accurate. Return a JSON array matching every input "id".\n\n${JSON.stringify(
+            promptPayload
+          )}`,
+          config: {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            systemInstruction:
+              'You are an Islamic scholar and linguistic translator specializing in accurate, reverent translations of the Qur’an, Hadith, Duas, and Salah manuals across Bangla, Bahasa Melayu/Indonesia, Pan-Hausa, and Fulfulde (Fula).',
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  translation: { type: Type.STRING },
+                },
+                required: ['id', 'translation'],
+              },
+            },
+          },
+        });
+
+        const parsed = JSON.parse((response.text ?? '[]').trim()) as Array<{
+          id?: string;
+          translation?: string;
+        }>;
+
+        const textById = new Map(missing.map((m) => [m.id, m.text.trim()]));
+        for (const entry of parsed) {
+          if (entry?.id && typeof entry.translation === 'string' && entry.translation.trim()) {
+            const clean = entry.translation.trim();
+            resolved[entry.id] = clean;
+            const orig = textById.get(entry.id);
+            if (orig) {
+              setCachedTranslation(`${targetLang}::${orig}`, clean);
+            }
+          }
+        }
+      }
+
+      return res.json({ translations: resolved });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Batch translation failed.';
+      console.error('Translate batch error:', message);
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distDir = path.resolve(__dirname, 'dist');
+    app.use(express.static(distDir));
+    app.get('*', (_req, res) => {
+      const indexFile = path.join(distDir, 'index.html');
+      if (fs.existsSync(indexFile)) {
+        res.sendFile(indexFile);
+      } else {
+        res.status(404).send('Build not found');
+      }
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Noor Recite server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Fatal server startup error:', err);
+  process.exit(1);
+});
