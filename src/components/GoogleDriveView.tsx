@@ -4,7 +4,6 @@ import {
   ArchiveRestore,
   Check,
   CheckCircle2,
-  Clock,
   Download,
   Edit3,
   Eye,
@@ -31,13 +30,11 @@ import {
   deleteDriveFilePermanently,
   downloadDriveFileBlob,
   DriveAboutInfo,
-  DriveActivityEntry,
   DriveAuthExpiredError,
   DriveFileItem,
   DriveFilePreviewResult,
   DriveListScope,
   fetchDriveAbout,
-  fetchDriveFileActivity,
   findNoorFolder,
   findOrCreateNoorFolder,
   formatDriveBytes,
@@ -72,10 +69,8 @@ type DriveHubTab = 'backup' | 'files';
 
 const SCOPE_OPTIONS: { id: DriveListScope; label: string }[] = [
   { id: 'noor-folder', label: 'Noor Study Folder' },
-  { id: 'all', label: 'All My Drive' },
   { id: 'docs', label: 'Docs & Notes' },
   { id: 'media', label: 'PDFs & Audio' },
-  { id: 'appdata', label: 'App Data' },
   { id: 'trashed', label: 'Trash' },
 ];
 
@@ -122,7 +117,6 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
   // Preview drawer state
   const [previewTarget, setPreviewTarget] = useState<DriveFileItem | null>(null);
   const [previewResult, setPreviewResult] = useState<DriveFilePreviewResult | null>(null);
-  const [previewActivity, setPreviewActivity] = useState<DriveActivityEntry[]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,13 +170,11 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
 
         const [backups, files] = await Promise.all([
           listNoorBackupFiles(accessToken, folder?.id),
-          targetScope === 'noor-folder' && !folder
-            ? Promise.resolve([] as DriveFileItem[])
-            : listDriveFiles(accessToken, {
-                scope: targetScope,
-                searchQuery: targetQuery,
-                noorFolderId: folder?.id,
-              }),
+          listDriveFiles(accessToken, {
+            scope: targetScope,
+            searchQuery: targetQuery,
+            noorFolderId: folder?.id,
+          }),
         ]);
         setBackupFiles(backups);
         setDriveFiles(files);
@@ -621,18 +613,13 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
     clearPreviewObjectUrl();
     setPreviewTarget(file);
     setPreviewResult(null);
-    setPreviewActivity([]);
     setIsLoadingPreview(true);
     try {
-      const [result, activity] = await Promise.all([
-        readDriveFilePreview(accessToken, file),
-        fetchDriveFileActivity(accessToken, file.id),
-      ]);
+      const result = await readDriveFilePreview(accessToken, file);
       if (result.objectUrl) {
         previewObjectUrlRef.current = result.objectUrl;
       }
       setPreviewResult(result);
-      setPreviewActivity(activity);
     } catch (err) {
       handleDriveError(err, `Unable to preview "${file.name}".`);
       setPreviewTarget(null);
@@ -732,7 +719,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
                 Drive Library Manager
               </p>
               <p className="text-xs text-[#404944] dark:text-emerald-200/75 leading-relaxed">
-                Browse, preview, upload, organize, and download study files with explicit confirmation before edits or deletions.
+                Upload, preview, and organize files in your Noor Recite Study folder. Edits and deletions require confirmation.
               </p>
             </div>
           </div>
@@ -1374,7 +1361,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
                                 </button>
                               </>
                             )}
-                            {listScope !== 'appdata' && listScope !== 'trashed' && (
+                            {listScope !== 'trashed' && (
                               <>
                                 <button
                                   type="button"
@@ -1433,17 +1420,6 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
                                   <span>Delete</span>
                                 </button>
                               </>
-                            )}
-                            {listScope === 'appdata' && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeletePermanently([file])}
-                                title="Delete App Data file"
-                                aria-label={`Delete ${file.name}`}
-                                className="min-h-[32px] px-2 rounded-lg border border-[#BA1A1A]/20 text-[#BA1A1A] dark:text-rose-300 hover:bg-[#BA1A1A]/8"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
                             )}
                           </div>
                         </div>
@@ -1527,30 +1503,6 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
                     </p>
                   )}
 
-                  {/* Activity Timeline (uses Drive Activity API when available) */}
-                  {previewActivity.length > 0 && (
-                    <div className="pt-2 border-t border-[#064E3B]/10 dark:border-emerald-300/15 space-y-2">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-[#404944] dark:text-emerald-200/80 inline-flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>Recent Drive Activity</span>
-                      </p>
-                      <div className="space-y-1.5">
-                        {previewActivity.map((act, i) => (
-                          <div
-                            key={`${act.timestamp}-${i}`}
-                            className="flex items-center justify-between gap-2 text-[11px] text-[#404944] dark:text-emerald-200/75"
-                          >
-                            <span className="font-medium text-[#022C22] dark:text-[#E6FFF4]">
-                              {act.actionLabel}
-                            </span>
-                            <span className="tabular-nums">
-                              {act.timestamp ? new Date(act.timestamp).toLocaleString() : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
