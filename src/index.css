@@ -60,6 +60,10 @@
   font-family: "Noto Nastaliq Urdu", "Amiri", Georgia, serif;
 }
 
+.font-translation-fa {
+  font-family: "Vazirmatn", "Amiri", sans-serif;
+}
+
 .font-translation-hi {
   font-family: "Noto Sans Devanagari", "Plus Jakarta Sans", sans-serif;
 }
@@ -70,6 +74,10 @@
 
 .font-translation-latin {
   font-family: "Noto Sans", "Plus Jakarta Sans", sans-serif;
+}
+
+.font-translation-zh {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans", sans-serif;
 }
 
 .word-glow-active {

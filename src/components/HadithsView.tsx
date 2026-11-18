@@ -4,7 +4,6 @@ import {
   BookOpenCheck,
   Check,
   Copy,
-  ListMusic,
   Loader2,
   Pause,
   Play,
@@ -16,26 +15,47 @@ import {
   HadithCategory,
   HadithItem,
   HadithTradition,
+  QariVoiceProfile,
   ReaderSettings,
   TranslationLanguage,
 } from '../types/quran';
 import { POPULAR_HADITHS } from '../data/hadithData';
 import {
   QARI_TTS_STYLES,
+  clearAudioUnlockFlag,
   getAiTtsAudioUrl,
   getCachedAiTtsUrl,
+  isUnlockingAudioEvent,
+  prefetchAiTtsAudio,
   unlockAudioElement,
 } from '../utils/aiTts';
+import { SpeechBounds, analyzeSpeechBounds } from '../utils/speechBounds';
+import {
+  applyVoiceTimbreProfile,
+  scrollActiveWordIntoView,
+  scrollTargetIntoCenter,
+  selectRegionalArabicVoice,
+  startBackgroundAudioKeepalive,
+  stopBackgroundAudioKeepalive,
+  updateBackgroundMediaSession,
+  useSmoothAudioProgress,
+} from '../utils/useSmoothReadingPlayback';
+import { HighlightedArabicText } from './HighlightedArabicText';
+import { HighlightedSyncText } from './HighlightedSyncText';
 import { RubElHizbBadge } from './RubElHizbIcon';
 import { LanguagePillSelector } from './LanguagePillSelector';
+import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { ScrollText, SkipBack, SkipForward } from 'lucide-react';
 
 interface HadithsViewProps {
   settings: ReaderSettings;
   onSelectLanguage: (lang: TranslationLanguage) => void;
+  onSelectVoiceProfile?: (profile: QariVoiceProfile) => void;
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
+  onToggleAutoplayQueue?: () => void;
 }
 
 const TRADITION_TABS: { id: 'all' | HadithTradition; label: string }[] = [
@@ -91,8 +111,10 @@ function normalizeArabicHadithForSpeech(text: string): string {
 export const HadithsView: React.FC<HadithsViewProps> = ({
   settings,
   onSelectLanguage,
+  onSelectVoiceProfile,
   onPracticeInReader,
   onPauseReaderAudio,
+  onToggleAutoplayQueue,
 }) => {
   const [activeTradition, setActiveTradition] = useState<'all' | HadithTradition>('all');
   const [activeCategory, setActiveCategory] = useState<'all' | HadithCategory>('all');
@@ -107,16 +129,23 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
   const [loopActiveItem, setLoopActiveItem] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [speechCharIndex, setSpeechCharIndex] = useState<number | null>(null);
+  const [activeSpeechBounds, setActiveSpeechBounds] = useState<SpeechBounds | null>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [speechUnavailableId, setSpeechUnavailableId] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const activeItemRef = useRef<HadithItem | null>(null);
+  const activeAudioUrlRef = useRef<string | null>(null);
   const queueFlagRef = useRef(false);
   const loopFlagRef = useRef(false);
+  const autoScrollRef = useRef(true);
   const filteredRef = useRef<HadithItem[]>([]);
   const playbackSessionRef = useRef(0);
   const abortCtrlRef = useRef<AbortController | null>(null);
+  const keepaliveHeldRef = useRef(false);
 
+  autoScrollRef.current = autoScrollEnabled;
   loopFlagRef.current = loopActiveItem;
 
   const activeLang: TranslationLanguage = settings.translationLanguage ?? 'en';
@@ -191,8 +220,84 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
   }, [settings.playbackSpeed]);
 
   useEffect(() => {
+    if (audioRef.current) {
+      applyVoiceTimbreProfile(audioRef.current, settings.qariVoiceProfile ?? 'recorded');
+    }
+  }, [settings.qariVoiceProfile]);
+
+  useEffect(() => {
+    if (isSpeaking && !keepaliveHeldRef.current) {
+      keepaliveHeldRef.current = true;
+      startBackgroundAudioKeepalive();
+    } else if (!isSpeaking && keepaliveHeldRef.current) {
+      keepaliveHeldRef.current = false;
+      stopBackgroundAudioKeepalive();
+    }
+  }, [isSpeaking]);
+
+  // Snap UI clock immediately when returning from backgrounded app
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && audioRef.current) {
+        setCurrentTime(audioRef.current.currentTime);
+        const d = audioRef.current.duration;
+        if (Number.isFinite(d) && d > 0) setDuration(d);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Early warm-up of visible Hadiths into local Disk/RAM cache from bundled static MP3s
+  useEffect(() => {
+    if (filteredItems.length === 0) return;
+    const ctrl = new AbortController();
+    const activeIdx = activeId
+      ? filteredItems.findIndex((h) => h.id === activeId)
+      : -1;
+    const ordered =
+      activeIdx >= 0
+        ? [
+            ...filteredItems.slice(activeIdx + 1),
+            ...filteredItems.slice(0, activeIdx),
+          ]
+        : filteredItems;
+
+    void prefetchAiTtsAudio(
+      ordered.map((h) => ({
+        text: h.arabic,
+        voiceName: 'Charon',
+        style: QARI_TTS_STYLES.hadith,
+      })),
+      {
+        signal: ctrl.signal,
+        concurrency: 3,
+        delayMs: 0,
+      }
+    );
+
+    return () => ctrl.abort();
+  }, [filteredItems, activeId]);
+
+  // Smooth auto-scroll active card into clear safe view when playing or advancing
+  useEffect(() => {
+    if (!activeId || !isSpeaking || !autoScrollEnabled) return;
+    const runScroll = () => scrollTargetIntoCenter(`hadith-card-${activeId}`);
+    const raf = window.requestAnimationFrame(runScroll);
+    const timer = window.setTimeout(runScroll, 120);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [activeId, isSpeaking, autoScrollEnabled]);
+
+  useEffect(() => {
     return () => {
       abortCtrlRef.current?.abort();
+      if (keepaliveHeldRef.current) {
+        keepaliveHeldRef.current = false;
+        stopBackgroundAudioKeepalive();
+      }
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -211,29 +316,37 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
       try {
         window.speechSynthesis.cancel();
         const voices = window.speechSynthesis.getVoices();
-        const arabicVoice =
-          voices.find((v) => v.lang.toLowerCase().startsWith('ar')) ?? null;
+        const { voice: arabicVoice, pitch } = selectRegionalArabicVoice(
+          voices,
+          settings.qariVoiceProfile ?? 'recorded'
+        );
 
         const utterance = new SpeechSynthesisUtterance(
           normalizeArabicHadithForSpeech(item.arabic)
         );
         utterance.lang = arabicVoice?.lang || 'ar-SA';
         if (arabicVoice) utterance.voice = arabicVoice;
+        utterance.pitch = pitch;
         utterance.rate = Math.max(
           0.65,
           Math.min(1.25, settings.playbackSpeed * 0.9)
         );
+        setSpeechCharIndex(null);
+        utterance.onboundary = (ev) => {
+          if (typeof ev.charIndex === 'number') {
+            setSpeechCharIndex(ev.charIndex);
+          }
+        };
 
         utterance.onend = () => {
           setIsSpeechFallback(false);
+          setSpeechCharIndex(null);
           if (queueFlagRef.current && continueQueue) {
             const list = filteredRef.current;
             const idx = list.findIndex((h) => h.id === item.id);
             if (idx >= 0 && idx < list.length - 1) {
               const next = list[idx + 1];
               void startAiPlaybackRef.current(next, true);
-              const el = document.getElementById(`hadith-card-${next.id}`);
-              el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
               return;
             }
           }
@@ -248,6 +361,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
           setIsQueuePlaying(false);
           setIsSpeaking(false);
           setIsSpeechFallback(false);
+          setSpeechCharIndex(null);
           setSpeechUnavailableId(item.id);
         };
 
@@ -260,7 +374,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         return false;
       }
     },
-    [settings.playbackSpeed]
+    [settings.playbackSpeed, settings.qariVoiceProfile]
   );
 
   const startAiPlayback = useCallback(
@@ -277,25 +391,59 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
       onPauseReaderAudio?.();
       setSpeechUnavailableId(null);
       setIsSpeechFallback(false);
+      setSpeechCharIndex(null);
 
       queueFlagRef.current = continueQueue;
       setIsQueuePlaying(continueQueue);
       activeItemRef.current = item;
+      activeAudioUrlRef.current = null;
       setActiveId(item.id);
+      setActiveSpeechBounds(null);
       setCurrentTime(0);
       setDuration(0);
+
+      // Keep the next 3 upcoming queue items hot in RAM so background onEnded transitions remain zero-gap
+      if (continueQueue) {
+        const list = filteredRef.current;
+        const curIdx = list.findIndex((h) => h.id === item.id);
+        if (curIdx >= 0) {
+          const lookahead = list.slice(curIdx + 1, curIdx + 4);
+          if (lookahead.length > 0) {
+            void prefetchAiTtsAudio(
+              lookahead.map((h) => ({
+                text: h.arabic,
+                voiceName: 'Charon',
+                style: QARI_TTS_STYLES.hadith,
+              })),
+              { concurrency: 3, delayMs: 0 }
+            );
+          }
+        }
+      }
+
+      const attachAndAnalyze = (audioEl: HTMLAudioElement, url: string) => {
+        activeAudioUrlRef.current = url;
+        clearAudioUnlockFlag(audioEl);
+        audioEl.muted = false;
+        void analyzeSpeechBounds(url).then((bounds) => {
+          if (activeAudioUrlRef.current === url) {
+            setActiveSpeechBounds(bounds);
+          }
+        });
+      };
 
       const cachedUrl = getCachedAiTtsUrl(item.arabic, {
         voiceName: 'Charon',
         style: QARI_TTS_STYLES.hadith,
       });
       if (audio && cachedUrl) {
+        attachAndAnalyze(audio, cachedUrl);
         if (audio.src !== cachedUrl) {
           audio.src = cachedUrl;
-          audio.load();
         } else {
           audio.currentTime = 0;
         }
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
         audio.playbackRate = settings.playbackSpeed;
         setIsBuffering(false);
         setIsSpeaking(true);
@@ -327,8 +475,9 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
           throw new Error('No audio element available');
         }
 
+        attachAndAnalyze(audio, blobUrl);
         audio.src = blobUrl;
-        audio.load();
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
         audio.playbackRate = settings.playbackSpeed;
         setIsBuffering(false);
 
@@ -345,7 +494,12 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         }
       }
     },
-    [onPauseReaderAudio, settings.playbackSpeed, tryBrowserSpeechFallback]
+    [
+      onPauseReaderAudio,
+      settings.playbackSpeed,
+      settings.qariVoiceProfile,
+      tryBrowserSpeechFallback,
+    ]
   );
 
   const startAiPlaybackRef = useRef(startAiPlayback);
@@ -353,6 +507,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
 
   const handleToggleListen = (item: HadithItem) => {
     const audio = audioRef.current;
+    const shouldAutoplay = settings.autoplayQueue !== false;
 
     if (activeId === item.id && isSpeaking) {
       stopSpeech();
@@ -369,15 +524,18 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
     ) {
       onPauseReaderAudio?.();
       setSpeechUnavailableId(null);
+      queueFlagRef.current = shouldAutoplay;
+      setIsQueuePlaying(shouldAutoplay);
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
       setIsSpeaking(true);
       audio.play().catch(() => {
-        void startAiPlayback(item, false);
+        void startAiPlayback(item, shouldAutoplay);
       });
       return;
     }
 
-    void startAiPlayback(item, false);
+    void startAiPlayback(item, shouldAutoplay);
   };
 
   const handleTogglePlayAll = () => {
@@ -387,11 +545,76 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
     }
     if (!filteredItems.length) return;
     setLoopActiveItem(false);
+    setAutoScrollEnabled(true);
     const startItem =
       (activeId && filteredItems.find((h) => h.id === activeId)) ||
       filteredItems[0];
     void startAiPlayback(startItem, true);
   };
+
+  const handleStepQueue = useCallback(
+    (dir: -1 | 1) => {
+      if (!filteredItems.length) return;
+      const idx = activeId
+        ? filteredItems.findIndex((h) => h.id === activeId)
+        : 0;
+      const nextIdx =
+        idx < 0
+          ? 0
+          : Math.min(filteredItems.length - 1, Math.max(0, idx + dir));
+      const target = filteredItems[nextIdx];
+      if (target) {
+        void startAiPlayback(target, isQueuePlaying || isSpeaking);
+      }
+    },
+    [filteredItems, activeId, startAiPlayback, isQueuePlaying, isSpeaking]
+  );
+
+  const activeHadithItem = useMemo(
+    () => (activeId ? POPULAR_HADITHS.find((h) => h.id === activeId) ?? null : null),
+    [activeId]
+  );
+
+  const smoothProgress = useSmoothAudioProgress({
+    audioRef,
+    isPlaying: isSpeaking,
+    isBuffering,
+    isSpeechFallback,
+    fallbackTextLength: activeHadithItem?.arabic.length ?? 60,
+    playbackSpeed: settings.playbackSpeed,
+    currentTime,
+    duration,
+    speechBounds: activeSpeechBounds,
+    wordTimings:
+      activeHadithItem && !isSpeechFallback
+        ? activeHadithItem.wordTimings ?? null
+        : null,
+    arabicText: activeHadithItem?.arabic ?? '',
+  });
+
+  // Follow active highlighted Arabic word inside tall Hadith cards
+  useEffect(() => {
+    if (!activeId || !isSpeaking || isBuffering || !autoScrollEnabled) return;
+    scrollActiveWordIntoView(`hadith-card-${activeId}`);
+  }, [activeId, isSpeaking, isBuffering, autoScrollEnabled, smoothProgress]);
+
+  useEffect(() => {
+    if (!activeHadithItem) return;
+    updateBackgroundMediaSession({
+      title: activeHadithItem.title,
+      artist: activeHadithItem.reference,
+      album: 'Noor Recite · Hadiths Reading Mode',
+      isPlaying: isSpeaking,
+      onPlay: () => {
+        if (!isSpeaking) void startAiPlaybackRef.current(activeHadithItem, isQueuePlaying);
+      },
+      onPause: () => {
+        if (isSpeaking) stopSpeech();
+      },
+      onNext: () => handleStepQueue(1),
+      onPrev: () => handleStepQueue(-1),
+    });
+  }, [activeHadithItem, isSpeaking, isQueuePlaying, stopSpeech, handleStepQueue]);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
@@ -416,6 +639,10 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
 
     if (loopFlagRef.current && audioRef.current) {
       audioRef.current.currentTime = 0;
+      applyVoiceTimbreProfile(
+        audioRef.current,
+        settings.qariVoiceProfile ?? 'recorded'
+      );
       audioRef.current.playbackRate = settings.playbackSpeed;
       audioRef.current.play().catch(() => {
         setIsSpeaking(false);
@@ -429,8 +656,6 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
       if (idx >= 0 && idx < list.length - 1) {
         const next = list[idx + 1];
         void startAiPlayback(next, true);
-        const el = document.getElementById(`hadith-card-${next.id}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         return;
       }
       queueFlagRef.current = false;
@@ -465,7 +690,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         : activeLang === 'en'
         ? item.translationEn
         : resolveDynamicText(item.translationEn);
-    const text = `${item.title}\n${item.narrator}\n${item.arabic}\n${item.transliteration}\n${tr}\n— ${item.reference} (${item.grading})`;
+    const text = `${item.title}\n${item.narrator}\n${item.arabic}\n${item.transliteration}\n${tr}\n(${item.reference}, ${item.grading})`;
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId(item.id);
@@ -481,39 +706,66 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 space-y-6">
       <audio
         ref={audioRef}
+        crossOrigin="anonymous"
         preload="auto"
         onLoadedMetadata={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setDuration(d);
         }}
-        onPlaying={() => setIsBuffering(false)}
-        onWaiting={() => setIsBuffering(true)}
+        onPlaying={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          applyVoiceTimbreProfile(
+            e.currentTarget,
+            settings.qariVoiceProfile ?? 'recorded'
+          );
+          setIsBuffering(false);
+        }}
+        onWaiting={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          setIsBuffering(true);
+        }}
         onTimeUpdate={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
           setCurrentTime(e.currentTarget.currentTime);
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setDuration(d);
         }}
-        onEnded={handleTrackEnded}
-        onError={handleTrackError}
+        onEnded={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          handleTrackEnded();
+        }}
+        onError={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          handleTrackError();
+        }}
       />
 
-      {/* Page Header + Inline Language Switcher */}
+      {/* Page Header + Inline Language & Voice Switchers */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="space-y-1.5">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#022C22] dark:text-[#E6FFF4]">
             Popular Authentic Hadiths
           </h1>
           <p className="text-sm text-[#404944] dark:text-emerald-200/80 max-w-2xl">
-            Treasured narrations from Sunni, Shia, and shared Islamic traditions—spanning Sahih al-Bukhari, Sahih Muslim, Al-Kāfī, Nahj al-Balāghah, and Nawawi’s 40 Hadith—with Arabic script, transliteration, translations in 7 languages, and practical wisdom.
+            Treasured narrations from Sunni, Shia, and shared collections with Arabic Qari Voice narration, word highlighting, transliteration, and translations in 13 languages.
           </p>
         </div>
 
-        <LanguagePillSelector
-          activeLang={activeLang}
-          onSelectLanguage={onSelectLanguage}
-          isTranslating={isTranslating}
-          className="self-start md:self-auto shrink-0"
-        />
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto shrink-0">
+          {onSelectVoiceProfile && (
+            <VoiceProfilePillSelector
+              activeProfile={settings.qariVoiceProfile ?? 'recorded'}
+              onSelectProfile={onSelectVoiceProfile}
+              align="left"
+            />
+          )}
+          <LanguagePillSelector
+            activeLang={activeLang}
+            onSelectLanguage={onSelectLanguage}
+            isTranslating={isTranslating}
+          />
+        </div>
       </div>
 
       {/* Tradition Filter Tabs (All · Shared · Sunni · Shia) */}
@@ -572,6 +824,21 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
+          {onToggleAutoplayQueue && (
+            <button
+              type="button"
+              onClick={onToggleAutoplayQueue}
+              aria-pressed={settings.autoplayQueue !== false}
+              title="Automatically advance to the next Hadith when playback finishes"
+              className={`min-h-[38px] px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                settings.autoplayQueue !== false
+                  ? 'border-[#064E3B]/25 bg-[#064E3B]/8 text-[#064E3B] dark:border-emerald-400/35 dark:bg-emerald-400/15 dark:text-emerald-200'
+                  : 'border-[#064E3B]/15 bg-white text-[#404944] dark:border-emerald-300/15 dark:bg-[#0A2921] dark:text-emerald-200/70'
+              }`}
+            >
+              Autoplay: {settings.autoplayQueue !== false ? 'On' : 'Off'}
+            </button>
+          )}
           {filteredItems.length > 0 && (
             <button
               type="button"
@@ -579,18 +846,18 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
               className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
                 isQueuePlaying && isSpeaking
                   ? 'bg-[#D97706] text-white dark:bg-amber-400 dark:text-[#022C22]'
-                  : 'bg-[#064E3B]/8 text-[#064E3B] hover:bg-[#064E3B] hover:text-[#FEF3C7] dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22]'
+                  : 'bg-[#064E3B] text-[#FEF3C7] hover:bg-[#003527] dark:bg-emerald-500 dark:text-[#022C22]'
               }`}
             >
               {isQueuePlaying && isSpeaking ? (
                 <>
                   <Pause className="w-3.5 h-3.5 fill-current" />
-                  <span>Pause Sequence</span>
+                  <span>Pause Reading Mode</span>
                 </>
               ) : (
                 <>
-                  <ListMusic className="w-3.5 h-3.5" />
-                  <span>Listen All ({filteredItems.length})</span>
+                  <ScrollText className="w-3.5 h-3.5" />
+                  <span>Reading Mode ({filteredItems.length})</span>
                 </>
               )}
             </button>
@@ -609,6 +876,69 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Active Reading Mode Control Strip */}
+      {(isQueuePlaying || (isSpeaking && activeHadithItem)) && activeHadithItem && (
+        <div
+          data-reading-strip="true"
+          className="sticky top-2 z-20 rounded-2xl border border-[#D97706]/35 dark:border-amber-400/35 bg-[#FFFFFF]/95 dark:bg-[#041D17]/95 backdrop-blur-md px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-2.5"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ScrollText className="w-4 h-4 text-[#D97706] dark:text-amber-300 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#022C22] dark:text-[#E6FFF4] truncate">
+                Reading Mode · {activeHadithItem.title}
+              </p>
+              <p className="text-[11px] text-[#0F766E] dark:text-emerald-300/85 truncate">
+                {activeHadithItem.reference}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setAutoScrollEnabled((v) => !v)}
+              aria-pressed={autoScrollEnabled}
+              className={`min-h-[32px] px-2.5 rounded-full text-[11px] font-semibold transition-colors ${
+                autoScrollEnabled
+                  ? 'bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-200'
+                  : 'text-[#404944] hover:bg-[#064E3B]/6 dark:text-emerald-200/70'
+              }`}
+            >
+              {autoScrollEnabled ? 'Auto-Scroll On' : 'Auto-Scroll Off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepQueue(-1)}
+              aria-label="Previous Hadith"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C22] hover:bg-[#064E3B]/8 dark:text-[#E6FFF4]"
+            >
+              <SkipBack className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleTogglePlayAll}
+              aria-label={isSpeaking ? 'Pause Reading Mode' : 'Resume Reading Mode'}
+              className="w-8 h-8 rounded-full bg-[#D97706] text-white dark:bg-amber-400 dark:text-[#022C22] flex items-center justify-center"
+            >
+              {isSpeaking ? (
+                <Pause className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepQueue(1)}
+              aria-label="Next Hadith"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C22] hover:bg-[#064E3B]/8 dark:text-[#E6FFF4]"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hadith Cards */}
       {filteredItems.length === 0 ? (
@@ -824,36 +1154,55 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
                   </p>
                 )}
 
-                {/* Arabic Hadith Matn */}
-                <p
-                  dir="rtl"
-                  className={`${fontClass} text-right leading-[2.1] text-[#022C22] dark:text-[#E6FFF4] pt-1`}
-                  style={{
-                    fontSize: `${Math.max(22, Math.min(34, settings.arabicFontSize - 2))}px`,
-                  }}
-                >
-                  {item.arabic}
-                </p>
+                {/* Arabic Hadith Matn with Word-by-Word Highlighting */}
+                <HighlightedArabicText
+                  text={item.arabic}
+                  isActive={isSpeakingThis && !isBufferingThis}
+                  progressRatio={isSelectedItem ? smoothProgress : 0}
+                  highlightStyle={settings.highlightStyle}
+                  speechCharIndex={
+                    isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                  }
+                  fontClass={fontClass}
+                  fontSize={Math.max(22, Math.min(34, settings.arabicFontSize - 2))}
+                  lineHeight={2.1}
+                  className="pt-1"
+                />
 
-                {/* Transliteration & Translation */}
+                {/* Synchronized Transliteration & Translation */}
                 {(settings.showTransliteration || settings.showTranslation) && (
                   <div className="space-y-2.5 min-w-0 break-words">
                     {settings.showTransliteration && (
-                      <p className="text-[14px] font-medium italic leading-relaxed text-[#0F766E] dark:text-emerald-300/90 break-words">
-                        {item.transliteration}
-                      </p>
+                      <HighlightedSyncText
+                        text={item.transliteration}
+                        arabicText={item.arabic}
+                        isActive={isSpeakingThis && !isBufferingThis}
+                        progressRatio={isSelectedItem ? smoothProgress : 0}
+                        speechCharIndex={
+                          isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                        }
+                        variant="transliteration"
+                        className="text-[14px] font-medium italic leading-relaxed text-[#0F766E] dark:text-emerald-300/90 break-words"
+                      />
                     )}
 
                     {settings.showTranslation && (
-                      <p
+                      <HighlightedSyncText
+                        text={localizedTranslation}
+                        arabicText={item.arabic}
+                        isActive={isSpeakingThis && !isBufferingThis}
+                        progressRatio={isSelectedItem ? smoothProgress : 0}
+                        speechCharIndex={
+                          isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                        }
+                        variant="translation"
+                        lang={activeLang}
                         dir={isRtlTranslationLang(activeLang) ? 'rtl' : 'ltr'}
                         className={`text-[#022C22]/90 dark:text-[#D0FAEA]/95 break-words ${getTranslationTextClass(
                           activeLang,
                           'card'
                         )}`}
-                      >
-                        {localizedTranslation}
-                      </p>
+                      />
                     )}
                   </div>
                 )}

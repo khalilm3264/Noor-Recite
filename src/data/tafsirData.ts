@@ -72,10 +72,10 @@ const CURATED_VERSES: Record<string, Partial<Record<MufassirId, ScholarlyExegesi
       arabicMatn:
         'أَيْ أَبْتَدِئُ بِكُلِّ اسْمٍ لِلَّهِ تَعَالَى، لِأَنَّ لَفْظَ «اسْمٍ» مُفْرَدٌ مُضَافٌ فَيَعُمُّ جَمِيعَ الأَسْمَاءِ الحُسْنَى.',
       commentary:
-        'By using the singular noun "Ism" annexed to Allāh, the phrase invokes all Divine Beautiful Names at once—seeking strength through His Power and serenity through His Compassion.',
-      asbabAnNuzul: 'Makkan revelation serving as an ever-present devotional opening.',
-      irabAndBalaghah: 'Al-Raḥmān (intensive pattern fa‘lān) overflows now; Al-Raḥīm (fa‘īl) endures perpetually.',
-      tadabburAction: 'Anchor anxieties before hard conversations by remembering Ar-Raḥmān’s vastness.',
+        'Saying "Name of Allāh" invokes all Divine Beautiful Names together, asking for strength through His Power and peace through His Mercy.',
+      asbabAnNuzul: 'Makkan revelation serving as a daily devotional opening.',
+      irabAndBalaghah: 'Al-Raḥmān signifies vast, present mercy; Al-Raḥīm signifies enduring mercy.',
+      tadabburAction: 'Center yourself before difficult tasks by remembering Ar-Raḥmān.',
     },
   },
   '1:4': {
@@ -83,13 +83,13 @@ const CURATED_VERSES: Record<string, Partial<Record<MufassirId, ScholarlyExegesi
       arabicMatn:
         'خَصَّ المُلْكَ بِـ«يَوْمِ الدِّينِ» لِأَنَّهُ لَا يَدَّعِي أَحَدٌ هُنَاكَ شَيْئًا وَلَا يَتَكَلَّمُ أَحَدٌ إِلَّا بِإِذْنِهِ.',
       commentary:
-        'Allāh owns every day, yet the verse specifies the Day of Recompense (Yawm al-Dīn) because every earthly claim to authority vanishes on that Day and absolute justice belongs strictly to Him.',
+        'Allāh owns every day, yet the verse highlights the Day of Recompense because every earthly claim to authority ends there and pure justice belongs to Him.',
       asbabAnNuzul:
-        'Revealed in early Makkan revelation alongside Al-Fātiḥah to anchor accountability and hope together.',
+        'Revealed in early Makkah within Al-Fātiḥah to balance hope with accountability.',
       irabAndBalaghah:
-        'Mutawātir dual reading: Ḥafṣ reads مَـٰلِكِ (Owner) while Warsh & Madīnan Imāms read مَلِكِ (Sovereign King)—joining complete ownership with supreme authority.',
+        'Ḥafṣ reads مَـٰلِكِ (Owner), while Warsh and Madīnan readers recite مَلِكِ (King), joining complete ownership with supreme rule.',
       tadabburAction:
-        'Let accountability refine fairness in daily dealings, knowing the Judge is both Just and Compassionate.',
+        'Practice fairness in daily dealings, remembering the Judge is both Just and Merciful.',
     },
   },
   '2:255': {
@@ -97,13 +97,13 @@ const CURATED_VERSES: Record<string, Partial<Record<MufassirId, ScholarlyExegesi
       arabicMatn:
         'هَذِهِ آيَةُ الْكُرْسِيِّ وَلَهَا شَأْنٌ عَظِيمٌ، وَقَدْ صَحَّ الْحَدِيثُ عَنْ رَسُولِ اللَّهِ ﷺ بِأَنَّهَا أَعْظَمُ آيَةٍ فِي كِتَابِ اللَّهِ.',
       commentary:
-        'Known as Āyat al-Kursī—the greatest verse in the Qur’ān—because every clause declares Pure Tawḥīd, self-subsisting Life (al-Ḥayy al-Qayyūm), tireless vigilance, and absolute cosmic sovereignty.',
+        'Āyat al-Kursī is the greatest verse in the Qur’ān because every clause affirms pure Tawḥīd, self-subsisting Life (al-Ḥayy al-Qayyūm), and total sovereignty.',
       asbabAnNuzul:
-        'Medinan revelation; the Prophet ﷺ asked Ubayy ibn Ka‘b which verse was greatest, and confirmed Āyat al-Kursī.',
+        'Medinan revelation; the Prophet ﷺ affirmed to Ubayy ibn Ka‘b that it is the greatest verse of Allāh’s Book.',
       irabAndBalaghah:
-        '"Lā ta’khudhuhu sinatun wa-lā nawm" progresses from light drowsiness (sinah) to deep sleep (nawm), negating even a moment’s inattention.',
+        '"Lā ta’khudhuhu sinatun wa-lā nawm" negates even light drowsiness before deep sleep.',
       tadabburAction:
-        'Recite Āyat al-Kursī after every obligatory Salah and before sleep for serene protection.',
+        'Recite Āyat al-Kursī after every obligatory prayer and before sleep.',
     },
   },
 };
@@ -121,31 +121,26 @@ export function getScholarlyExegesis(
   const brief = ayah.tafsirBrief || `Contemplate the guidance within ${surahName} ${ayah.verseKey}.`;
 
   const angleLead: Record<MufassirId, string> = {
-    'ibn-kathir':
-      'From the classical Tafsīr bi-l-Ma’thūr lens of Imām Ibn Kathīr, this verse harmonizes with corroborating Qur’ānic passages and Prophetic practice:',
-    qurtubi:
-      'Imām al-Qurṭubī highlights the ethical obligations, adab of heart and speech, and communal wisdom embedded in these words:',
-    sadi:
-      'Shaykh ‘Abd al-Raḥmān as-Sa‘dī traces how this verse nurtures certainty in Allāh’s wisdom and deepens practical peace of mind:',
-    tabari:
-      'Imām Aṭ-Ṭabarī surveys the early generations’ lexical reports around the phrasing of this passage:',
-    jalalayn:
-      'In the concise gloss of Tafsīr al-Jalālayn, the sentence structure clarifies each clause directly:',
+    'ibn-kathir': 'Imām Ibn Kathīr links this verse to supporting Qur’ān and Prophetic narrations.',
+    qurtubi: 'Imām al-Qurṭubī focuses on the practical ethics and speech taught here.',
+    sadi: 'Shaykh as-Sa‘dī traces how this verse builds trust in Allāh and inner peace.',
+    tabari: 'Imām Aṭ-Ṭabarī cites early lexical reports on the phrasing of this passage.',
+    jalalayn: 'Tafsīr al-Jalālayn clarifies each clause concisely.',
   };
 
   return {
     arabicMatn:
       fallbackCurated?.arabicMatn ??
-      `${ayah.arabic} — قَالَ العُلَمَاءُ فِي بَيَانِ هَذِهِ الآيَةِ مِنْ سُورَةِ ${surahName}: هِيَ تَذْكِرَةٌ وَهُدًى لِأُولِي الأَلْبَابِ.`,
-    commentary: `${angleLead[mufassirId]} ${brief}`,
+      `${ayah.arabic} ۞ قَالَ العُلَمَاءُ فِي بَيَانِ هَذِهِ الآيَةِ مِنْ سُورَةِ ${surahName}: هِيَ تَذْكِرَةٌ وَهُدًى لِأُولِي الأَلْبَابِ.`,
+    commentary: `${brief} ${angleLead[mufassirId]}`,
     asbabAnNuzul:
       fallbackCurated?.asbabAnNuzul ??
-      `Delivered within the cohesive flow of Sūrah ${surahName} (Juz’ ${ayah.juz}) to reinforce creed, character, and devotional presence.`,
+      `Revealed within Sūrah ${surahName} (Juz’ ${ayah.juz}) to strengthen faith, character, and devotion.`,
     irabAndBalaghah:
       fallbackCurated?.irabAndBalaghah ??
-      `Notice the rhythmic cadence (${ayah.words.length} tokens) balancing clear Arabic morphology with balanced stop points (${mufassir.methodology}).`,
+      `Balanced cadence across ${ayah.words.length} words with clear phrasing (${mufassir.methodology}).`,
     tadabburAction:
       fallbackCurated?.tadabburAction ??
-      `Pause after reciting ${ayah.verseKey}, reflect on its direct call to your heart today, and act upon one concrete takeaway.`,
+      `Pause after ${ayah.verseKey} and apply one direct lesson today.`,
   };
 }

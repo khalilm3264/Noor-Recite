@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Play, Pause } from 'lucide-react';
+import { FileDown, Play, Pause, ScrollText } from 'lucide-react';
 import {
   OpenerPhase,
   ReaderSettings,
@@ -18,6 +18,7 @@ import {
   getTranslationTextClass,
   getWordMeaningText,
   isRtlTranslationLang,
+  resolveEffectiveSyncedWordIndex,
 } from '../utils/translationConfig';
 
 interface SurahHeaderBannerProps {
@@ -27,9 +28,11 @@ interface SurahHeaderBannerProps {
   openerPhase: OpenerPhase | null;
   openerWordIndex: number | null;
   onTogglePlaySurah: () => void;
+  onToggleReadingMode?: () => void;
   onPlayOpener: (phase: OpenerPhase) => void;
   onSelectLanguage: (lang: TranslationLanguage) => void;
   onOpenQiraatExplorer?: () => void;
+  onExportPdf?: () => void;
 }
 
 export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
@@ -39,9 +42,11 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
   openerPhase,
   openerWordIndex,
   onTogglePlaySurah,
+  onToggleReadingMode,
   onPlayOpener,
   onSelectLanguage,
   onOpenQiraatExplorer,
+  onExportPdf,
 }) => {
   const [openOpenerFootnote, setOpenOpenerFootnote] = useState<{
     phase: OpenerPhase;
@@ -81,6 +86,7 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
         localizedLine.resolvedLang
       ) ??
       [];
+    const effectiveSegWordIdx = resolveEffectiveSyncedWordIndex(syncedIdx, activeSegments);
 
     return (
       <div
@@ -186,15 +192,16 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
             )}`}
           >
             {activeSegments.map((seg, segIdx) => {
-              const isSynced = syncedIdx === seg.wordIndex;
-              const isPast = syncedIdx !== null && seg.wordIndex < syncedIdx;
+              const isSynced = effectiveSegWordIdx === seg.wordIndex;
+              const isPast =
+                effectiveSegWordIdx !== null && seg.wordIndex < effectiveSegWordIdx;
               const fnItem = footnoteByWordIdx.get(seg.wordIndex);
               const isOpen = activeFn?.number === fnItem?.number;
 
               return (
                 <React.Fragment key={`${seg.wordIndex}-${segIdx}`}>
                   <span
-                    className={`rounded px-0.5 ${
+                    className={`rounded ${localizedLine.resolvedLang === 'zh' && !isSynced ? 'px-0' : 'px-0.5'} ${
                       isSynced
                         ? 'transition-none bg-[#D97706]/16 text-[#003527] dark:bg-amber-400/20 dark:text-amber-100 underline decoration-[#D97706]/85 dark:decoration-amber-400/85 decoration-2 underline-offset-4 font-semibold'
                         : isPast
@@ -228,7 +235,10 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
                       {fnItem.number}
                     </button>
                   )}
-                  {segIdx < activeSegments.length - 1 ? ' ' : ''}
+                  {segIdx < activeSegments.length - 1 &&
+                  localizedLine.resolvedLang !== 'zh'
+                    ? ' '
+                    : ''}
                 </React.Fragment>
               );
             })}
@@ -364,7 +374,7 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
               {surah.nameSimple}
             </p>
             <span className="text-sm font-medium text-[#0F766E] dark:text-emerald-300">
-              — {surah.nameMeaning}
+              · {surah.nameMeaning}
             </span>
           </div>
         </div>
@@ -408,10 +418,41 @@ export const SurahHeaderBanner: React.FC<SurahHeaderBannerProps> = ({
             )}
           </button>
 
+          {onToggleReadingMode && (
+            <button
+              type="button"
+              onClick={onToggleReadingMode}
+              aria-pressed={settings.readingMode !== false}
+              title="Auto-scrolls verses and continues into the next Surah in the background"
+              className={`min-h-[44px] px-4 py-2.5 rounded-full text-xs font-semibold tracking-wide flex items-center gap-2 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                settings.readingMode !== false
+                  ? 'border-[#D97706]/50 bg-[#D97706]/12 text-[#904D00] dark:border-amber-400/50 dark:bg-amber-400/15 dark:text-amber-200'
+                  : 'border-[#064E3B]/15 bg-white/80 text-[#404944] hover:text-[#022C22] dark:border-emerald-300/20 dark:bg-[#041D17] dark:text-emerald-200/80'
+              }`}
+            >
+              <ScrollText className="w-4 h-4 shrink-0" />
+              <span>
+                {settings.readingMode !== false ? 'Reading Mode: On' : 'Reading Mode'}
+              </span>
+            </button>
+          )}
+
           <LanguagePillSelector
             activeLang={activeLang}
             onSelectLanguage={onSelectLanguage}
           />
+
+          {onExportPdf && (
+            <button
+              type="button"
+              onClick={onExportPdf}
+              title={`Export Surah ${surah.nameSimple} as a styled PDF document`}
+              className="min-h-[44px] px-4 py-2.5 rounded-full text-xs font-semibold tracking-wide flex items-center gap-2 border border-[#064E3B]/15 bg-white/85 text-[#022C22] hover:border-[#D97706]/60 hover:text-[#904D00] dark:border-emerald-300/20 dark:bg-[#041D17] dark:text-emerald-200 dark:hover:border-amber-400/60 dark:hover:text-amber-200 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
+            >
+              <FileDown className="w-4 h-4 shrink-0" />
+              <span>Export PDF</span>
+            </button>
+          )}
         </div>
       </div>
     </section>

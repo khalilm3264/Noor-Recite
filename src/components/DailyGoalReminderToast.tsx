@@ -33,8 +33,8 @@ export const DailyGoalReminderToast: React.FC<DailyGoalReminderToastProps> = ({
   const dayUnit = streakCount === 1 ? 'day' : 'days';
   const subtitle =
     streakCount > 0
-      ? `Keep your ${streakCount}-${dayUnit} streak going — begin your ${dailyGoal} verses today.`
-      : `Settle in for a quiet moment — start your ${dailyGoal}-verse goal today.`;
+      ? `Keep your ${streakCount}-${dayUnit} streak going by starting your ${dailyGoal} verses today.`
+      : `Settle in and start your ${dailyGoal}-verse goal today.`;
 
   return (
     <div

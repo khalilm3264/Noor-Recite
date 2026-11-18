@@ -10,9 +10,28 @@ export type AppScreen =
   | 'tajweed'
   | 'bookmarks'
   | 'drive';
-export type TranslationLanguage = 'en' | 'hi' | 'ur' | 'bn' | 'ms' | 'ha' | 'ff';
+export type TranslationLanguage =
+  | 'en'
+  | 'hi'
+  | 'ur'
+  | 'bn'
+  | 'ms'
+  | 'ha'
+  | 'ff'
+  | 'fa'
+  | 'tr'
+  | 'ru'
+  | 'zh'
+  | 'es'
+  | 'fr';
 export type WordHighlightStyle = 'pill' | 'wave' | 'box' | 'glow';
 export type RiwayahId = 'hafs' | 'warsh';
+export type QariVoiceProfile =
+  | 'recorded'
+  | 'male-gulf'
+  | 'male-egypt'
+  | 'male-maghreb'
+  | 'female-warm';
 export type MufassirId = 'ibn-kathir' | 'qurtubi' | 'sadi' | 'tabari' | 'jalalayn';
 
 export type TajweedRuleType =
@@ -260,9 +279,42 @@ export interface ReaderSettings {
   wordRepeatCount?: 1 | 3 | 5;
   riwayah?: RiwayahId;
   maghrebiOrthography?: boolean;
+  readingMode?: boolean;
+  qariVoiceProfile?: QariVoiceProfile;
+  autoplayQueue?: boolean;
+  playEntireJuz?: boolean;
+  activeJuzNumber?: number;
 }
 
-export type DuaCategory = 'kalimas' | 'daily' | 'quranic' | 'adhkar';
+export type DuaCategory = 'kalimas' | 'daily' | 'quranic' | 'adhkar' | 'rare';
+
+export interface DuaAlternateVariant {
+  id: string;
+  label: string;
+  badge?: string;
+  arabic: string;
+  transliteration: string;
+  translationEn: string;
+  translationHi: string;
+  translationUr: string;
+  reference: string;
+  note?: string;
+  audioUrl?: string;
+  fallbackAudioUrl?: string;
+  quranRef?: {
+    surahId: number;
+    ayahNumber: number;
+  };
+  quranRange?: {
+    surahId: number;
+    startAyah: number;
+    endAyah: number;
+  };
+  wordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
+}
 
 export interface DuaOrKalimaItem {
   id: string;
@@ -284,6 +336,17 @@ export interface DuaOrKalimaItem {
     surahId: number;
     ayahNumber: number;
   };
+  quranRange?: {
+    surahId: number;
+    startAyah: number;
+    endAyah: number;
+  };
+  wordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
+  primaryVariantLabel?: string;
+  alternates?: DuaAlternateVariant[];
 }
 
 export type PrayerCategory = 'daily' | 'eid' | 'special';
@@ -309,6 +372,10 @@ export interface PrayerGuideItem {
   niyyahEn: string;
   niyyahHi: string;
   niyyahUr: string;
+  niyyahWordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
   stepsEn: string[];
   stepsHi: string[];
   stepsUr: string[];
@@ -322,6 +389,10 @@ export interface PrayerGuideItem {
     translationUr: string;
     audioUrl?: string;
     fallbackAudioUrl?: string;
+    wordTimings?: Array<{
+      startMs: number;
+      endMs: number;
+    }>;
   };
 }
 
@@ -340,9 +411,18 @@ export interface SalahPostureStep {
   note: string;
   audioUrl?: string;
   fallbackAudioUrl?: string;
+  wordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
   quranRef?: {
     surahId: number;
     ayahNumber: number;
+  };
+  quranRange?: {
+    surahId: number;
+    startAyah: number;
+    endAyah: number;
   };
 }
 
@@ -355,6 +435,10 @@ export interface WuduStep {
   arabic?: string;
   transliteration?: string;
   audioUrl?: string;
+  wordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
 }
 
 export type HadithCategory = 'faith' | 'character' | 'worship' | 'knowledge';
@@ -382,4 +466,9 @@ export interface HadithItem {
     surahId: number;
     ayahNumber: number;
   };
+  audioUrl?: string;
+  wordTimings?: Array<{
+    startMs: number;
+    endMs: number;
+  }>;
 }

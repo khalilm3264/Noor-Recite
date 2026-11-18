@@ -136,7 +136,18 @@ export async function translateTextsBatch(
   return out;
 }
 
-const DYNAMIC_LANGS = new Set<TranslationLanguage>(['bn', 'ms', 'ha', 'ff']);
+const DYNAMIC_LANGS = new Set<TranslationLanguage>([
+  'bn',
+  'ms',
+  'ha',
+  'ff',
+  'fa',
+  'tr',
+  'ru',
+  'zh',
+  'es',
+  'fr',
+]);
 
 export function useBatchTranslations(
   lang: TranslationLanguage,

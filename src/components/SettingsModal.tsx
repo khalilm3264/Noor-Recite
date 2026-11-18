@@ -25,16 +25,13 @@ import {
 } from 'recharts';
 import {
   HifzSpacedItem,
+  QariVoiceProfile,
   ReaderSettings,
-  TranslationLanguage,
   WordHighlightStyle,
 } from '../types/quran';
-import { RECITERS } from '../data/quranData';
+import { JUZ_BOUNDARIES, RECITERS } from '../data/quranData';
 import { formatAyahByRiwayah } from '../data/qiraatData';
-import {
-  TRANSLATION_LANGUAGE_OPTIONS,
-  isRtlTranslationLang,
-} from '../utils/translationConfig';
+import { QARI_VOICE_PROFILES } from '../utils/useSmoothReadingPlayback';
 import {
   RecitationHistoryEntry,
   computeRecitationInsights,
@@ -47,6 +44,7 @@ import {
   computeHifzSummary,
 } from '../utils/hifzProgress';
 import { GoogleSignInButton } from './GoogleSignInButton';
+import { LanguagePillSelector } from './LanguagePillSelector';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -58,6 +56,7 @@ interface SettingsModalProps {
   onClearRecitationHistory: () => void;
   onToggleDarkMode: () => void;
   onUpdateSettings: (patch: Partial<ReaderSettings>) => void;
+  onStartPlayJuz?: (juzNumber: number) => void;
   onClose: () => void;
   driveConnected?: boolean;
   driveUserEmail?: string | null;
@@ -132,6 +131,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearRecitationHistory,
   onToggleDarkMode,
   onUpdateSettings,
+  onStartPlayJuz,
   onClose,
   driveConnected = false,
   driveUserEmail = null,
@@ -789,51 +789,92 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Translation Language */}
+          {/* Translation Language Dropdown */}
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-[#404944] dark:text-emerald-200/80">
-              Translation Language
+              Translation Language (13 Languages)
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2">
-              {TRANSLATION_LANGUAGE_OPTIONS.map((opt) => {
-                const selected = (settings.translationLanguage ?? 'en') === opt.id;
-                const isRtl = isRtlTranslationLang(opt.id);
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => onUpdateSettings({ translationLanguage: opt.id as TranslationLanguage })}
-                    className={`min-w-0 min-h-[56px] px-2 py-2 rounded-xl border flex flex-col items-center justify-center text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
-                      selected
-                        ? 'bg-[#064E3B] text-white border-[#064E3B] dark:bg-emerald-500 dark:text-[#022C22] dark:border-emerald-500'
-                        : 'border-[#064E3B]/15 text-[#022C22] hover:bg-[#064E3B]/[0.04] dark:border-emerald-300/15 dark:text-[#E6FFF4] dark:hover:bg-emerald-400/10'
-                    }`}
-                  >
-                    <span
-                      dir={isRtl ? 'rtl' : 'ltr'}
-                      className={`text-xs sm:text-[13px] font-semibold leading-snug ${opt.fontClass}`}
-                    >
-                      {opt.label}
-                    </span>
-                    <span
-                      dir={isRtl ? 'rtl' : 'ltr'}
-                      className={`text-[10px] leading-tight mt-0.5 max-w-full truncate ${opt.fontClass} ${
-                        selected
-                          ? 'text-white/80 dark:text-[#022C22]/80'
-                          : 'text-[#404944] dark:text-emerald-200/75'
-                      }`}
-                    >
-                      {opt.sub}
-                    </span>
-                  </button>
-                );
-              })}
+            <LanguagePillSelector
+              activeLang={settings.translationLanguage ?? 'en'}
+              onSelectLanguage={(lang) => onUpdateSettings({ translationLanguage: lang })}
+              fullWidth
+              align="left"
+            />
+          </div>
+
+          {/* Play Entire Juz (Hands-Free Continuous Flow) */}
+          <div className="rounded-xl border border-[#064E3B]/15 dark:border-emerald-300/20 bg-[#FBFBFA] dark:bg-[#041D17] p-3.5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[#022C22] dark:text-[#E6FFF4]">
+                  Play Entire Juz Continuously
+                </p>
+                <p className="text-xs text-[#404944] dark:text-emerald-200/75">
+                  Recites every Surah inside the selected Juz hands-free, even in background apps
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={Boolean(settings.playEntireJuz)}
+                aria-label="Play Entire Juz Continuously"
+                onClick={() => onUpdateSettings({ playEntireJuz: !settings.playEntireJuz })}
+                className={`w-10 h-6 rounded-full p-0.5 transition-colors shrink-0 flex items-center ${
+                  settings.playEntireJuz
+                    ? 'bg-[#064E3B] dark:bg-emerald-500 justify-end'
+                    : 'bg-[#064E3B]/18 dark:bg-emerald-300/20 justify-start'
+                }`}
+              >
+                <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="settings-juz-select" className="sr-only">
+                Select Juz Number
+              </label>
+              <select
+                id="settings-juz-select"
+                value={settings.activeJuzNumber ?? 1}
+                onChange={(e) =>
+                  onUpdateSettings({ activeJuzNumber: Number(e.target.value) })
+                }
+                className="flex-1 min-w-[190px] min-h-[38px] px-3 rounded-xl border border-[#064E3B]/15 dark:border-emerald-300/20 bg-white dark:bg-[#0A2921] text-xs font-semibold text-[#022C22] dark:text-[#E6FFF4] focus:outline-none focus:ring-2 focus:ring-[#D97706]"
+              >
+                {JUZ_BOUNDARIES.map((j) => (
+                  <option key={j.juzNumber} value={j.juzNumber}>
+                    Juz {j.juzNumber} · {j.startSurah}:{j.startAyah} – {j.endSurah}:{j.endAyah}
+                  </option>
+                ))}
+              </select>
+              {onStartPlayJuz && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onStartPlayJuz(settings.activeJuzNumber ?? 1);
+                    onClose();
+                  }}
+                  className="min-h-[38px] px-4 rounded-xl bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22] text-xs font-semibold hover:opacity-95 shrink-0"
+                >
+                  Play Juz {settings.activeJuzNumber ?? 1} Now
+                </button>
+              )}
             </div>
           </div>
 
           {/* Toggles */}
           <div className="space-y-2.5">
             {[
+              {
+                key: 'readingMode' as const,
+                title: 'Continuous Reading Mode',
+                desc: 'Center-scroll verses and advance automatically across Surahs',
+              },
+              {
+                key: 'autoplayQueue' as const,
+                title: 'Autoplay Hadiths, Duas & Salah Steps',
+                desc: 'Automatically play the next Hadith, Dua, Kalima, or Salah step when one ends',
+              },
               {
                 key: 'showTajweedColors' as const,
                 title: 'Tajweed Color Illumination',
@@ -847,15 +888,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {
                 key: 'showTranslation' as const,
                 title: 'Verse Translation',
-                desc: 'Display English, Hindi, or Urdu rendering',
+                desc: 'Display meaning in your selected translation language',
               },
               {
                 key: 'alwaysShowFootnotes' as const,
                 title: 'Always Keep Footnotes Open',
-                desc: 'Display linguistic footnotes expanded beneath every verse',
+                desc: 'Keep word footnotes expanded beneath every verse',
               },
             ].map((item) => {
-              const active = settings[item.key];
+              const active =
+                item.key === 'readingMode'
+                  ? settings.readingMode !== false
+                  : item.key === 'autoplayQueue'
+                  ? settings.autoplayQueue !== false
+                  : Boolean(settings[item.key]);
               return (
                 <button
                   key={item.key}
@@ -1051,6 +1097,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
                 </span>
               </button>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[#404944] dark:text-emerald-200/80">
+                  Voice Tone &amp; Accent Profile (Hadiths, Duas &amp; Reader)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {QARI_VOICE_PROFILES.map((vp) => {
+                  const selected = (settings.qariVoiceProfile ?? 'recorded') === vp.id;
+                  return (
+                    <button
+                      key={vp.id}
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({ qariVoiceProfile: vp.id as QariVoiceProfile })
+                      }
+                      className={`min-h-[46px] px-3 py-2 rounded-xl border text-left transition-colors ${
+                        selected
+                          ? 'bg-[#064E3B] text-white border-[#064E3B] dark:bg-emerald-500 dark:text-[#022C22]'
+                          : 'border-[#064E3B]/15 text-[#022C22] dark:border-emerald-300/15 dark:text-[#E6FFF4] hover:bg-[#064E3B]/[0.03]'
+                      }`}
+                    >
+                      <p className="text-xs font-bold">{vp.label}</p>
+                      <p
+                        className={`text-[10.5px] leading-snug ${
+                          selected
+                            ? 'text-white/80 dark:text-[#022C22]/80'
+                            : 'text-[#404944] dark:text-emerald-200/75'
+                        }`}
+                      >
+                        {vp.desc}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-1">

@@ -3,18 +3,21 @@ import {
   ArrowUpRight,
   Check,
   Copy,
-  ListMusic,
   Loader2,
   Pause,
   Play,
   Repeat1,
   RotateCcw,
+  ScrollText,
   Search,
+  SkipBack,
+  SkipForward,
   Volume2,
 } from 'lucide-react';
 import {
   DuaCategory,
   DuaOrKalimaItem,
+  QariVoiceProfile,
   ReaderSettings,
   Reciter,
   TranslationLanguage,
@@ -24,12 +27,30 @@ import { getEveryAyahUrl } from '../data/quranData';
 import { ensureAudioCached, getCachedAudioSrc } from '../utils/audioCache';
 import {
   QARI_TTS_STYLES,
+  clearAudioUnlockFlag,
   getAiTtsAudioUrl,
   getCachedAiTtsUrl,
+  isUnlockingAudioEvent,
+  prefetchAiTtsAudio,
   unlockAudioElement,
 } from '../utils/aiTts';
+import { SpeechBounds, analyzeSpeechBounds } from '../utils/speechBounds';
+import { getArabicVerseWeightRanges } from '../utils/arabicWordSync';
+import {
+  applyVoiceTimbreProfile,
+  scrollActiveWordIntoView,
+  scrollTargetIntoCenter,
+  selectRegionalArabicVoice,
+  startBackgroundAudioKeepalive,
+  stopBackgroundAudioKeepalive,
+  updateBackgroundMediaSession,
+  useSmoothAudioProgress,
+} from '../utils/useSmoothReadingPlayback';
+import { HighlightedArabicText } from './HighlightedArabicText';
+import { HighlightedSyncText } from './HighlightedSyncText';
 import { RubElHizbBadge } from './RubElHizbIcon';
 import { LanguagePillSelector } from './LanguagePillSelector';
+import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
 
@@ -37,6 +58,8 @@ interface DuasKalimasViewProps {
   settings: ReaderSettings;
   reciter: Reciter;
   onSelectLanguage: (lang: TranslationLanguage) => void;
+  onSelectVoiceProfile?: (profile: QariVoiceProfile) => void;
+  onToggleAutoplayQueue?: () => void;
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
 }
@@ -47,7 +70,35 @@ const CATEGORY_TABS: { id: 'all' | DuaCategory; label: string }[] = [
   { id: 'daily', label: 'Daily Duas' },
   { id: 'quranic', label: "Qur'anic Duas" },
   { id: 'adhkar', label: 'Adhkar & Salawat' },
+  { id: 'rare', label: 'Nature & Obscure' },
 ];
+
+function resolveEffectiveDuaItem(
+  item: DuaOrKalimaItem,
+  variantId?: string
+): DuaOrKalimaItem {
+  if (!variantId || variantId === 'primary' || !item.alternates?.length) {
+    return item;
+  }
+  const alt = item.alternates.find((v) => v.id === variantId);
+  if (!alt) return item;
+  return {
+    ...item,
+    badge: alt.badge ?? item.badge,
+    arabic: alt.arabic,
+    transliteration: alt.transliteration,
+    translationEn: alt.translationEn,
+    translationHi: alt.translationHi,
+    translationUr: alt.translationUr,
+    reference: alt.reference,
+    note: alt.note ?? item.note,
+    audioUrl: alt.audioUrl,
+    fallbackAudioUrl: alt.fallbackAudioUrl,
+    quranRef: alt.quranRef,
+    quranRange: alt.quranRange,
+    wordTimings: alt.wordTimings,
+  };
+}
 
 function formatDuration(sec: number): string {
   const safe = Math.max(0, Math.floor(sec));
@@ -68,6 +119,8 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   settings,
   reciter,
   onSelectLanguage,
+  onSelectVoiceProfile,
+  onToggleAutoplayQueue,
   onPracticeInReader,
   onPauseReaderAudio,
 }) => {
@@ -75,35 +128,63 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const [query, setQuery] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isAiVoice, setIsAiVoice] = useState(false);
+  const [isFallbackAudioSource, setIsFallbackAudioSource] = useState(false);
   const [isSpeechFallback, setIsSpeechFallback] = useState(false);
   const [isQueuePlaying, setIsQueuePlaying] = useState(false);
   const [loopActiveItem, setLoopActiveItem] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [activeVerseIndex, setActiveVerseIndex] = useState(0);
+  const [speechCharIndex, setSpeechCharIndex] = useState<number | null>(null);
+  const [activeSpeechBounds, setActiveSpeechBounds] = useState<SpeechBounds | null>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [audioErrorId, setAudioErrorId] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeAudioUrlRef = useRef<string | null>(null);
+  const activeVerseIndexRef = useRef(0);
+  const rangeDurationsRef = useRef<Record<number, number>>({});
+  const pendingSeekSecRef = useRef<number | null>(null);
   const fallbackAttemptedRef = useRef<Set<string>>(new Set());
+  const externalAttemptedRef = useRef<Set<string>>(new Set());
   const aiAttemptedRef = useRef<Set<string>>(new Set());
   const activeItemRef = useRef<DuaOrKalimaItem | null>(null);
+  const queueFlagRef = useRef(false);
+  const loopFlagRef = useRef(false);
+  const filteredRef = useRef<DuaOrKalimaItem[]>([]);
   const playbackSessionRef = useRef(0);
   const abortCtrlRef = useRef<AbortController | null>(null);
+  const keepaliveHeldRef = useRef(false);
+
+  loopFlagRef.current = loopActiveItem;
 
   const activeLang: TranslationLanguage = settings.translationLanguage ?? 'en';
-  const translationEntries = useMemo(
-    () =>
-      DUAS_AND_KALIMAS.map((item) => ({
+  const translationEntries = useMemo(() => {
+    const entries: { key: string; text: string; arabic: string }[] = [];
+    for (const item of DUAS_AND_KALIMAS) {
+      entries.push({
         key: `dua-tr-${item.id}`,
         text: item.translationEn,
         arabic: item.arabic,
-      })),
-    []
-  );
+      });
+      if (item.alternates) {
+        for (const alt of item.alternates) {
+          entries.push({
+            key: `dua-tr-${item.id}-${alt.id}`,
+            text: alt.translationEn,
+            arabic: alt.arabic,
+          });
+        }
+      }
+    }
+    return entries;
+  }, []);
   const { resolve: resolveDynamicText, isTranslating } = useBatchTranslations(
     activeLang,
     translationEntries
@@ -114,8 +195,23 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       ? 'font-quran-scheherazade'
       : 'font-quran-amiri';
 
+  // Explicit audioUrl (Kalimas, Duas, and exact-excerpt Qari clips) takes priority; full-verse Qur'anic duas stream from active reciter
   const getPrimaryAudioUrl = useCallback(
-    (item: DuaOrKalimaItem): string | null => {
+    (item: DuaOrKalimaItem, verseOffset = 0): string | null => {
+      if (item.audioUrl) {
+        return item.audioUrl;
+      }
+      if (item.quranRange) {
+        const ayahNum = Math.min(
+          item.quranRange.endAyah,
+          item.quranRange.startAyah + Math.max(0, verseOffset)
+        );
+        return getEveryAyahUrl(
+          reciter.everyAyahFolder,
+          item.quranRange.surahId,
+          ayahNum
+        );
+      }
       if (item.quranRef) {
         return getEveryAyahUrl(
           reciter.everyAyahFolder,
@@ -123,9 +219,48 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
           item.quranRef.ayahNumber
         );
       }
-      return item.audioUrl ?? null;
+      return null;
     },
     [reciter.everyAyahFolder]
+  );
+
+  const getActiveVariantId = useCallback(
+    (item: DuaOrKalimaItem): string => {
+      const explicit = selectedVariants[item.id];
+      if (explicit) return explicit;
+      const q = query.trim().toLowerCase();
+      if (q && item.alternates?.length) {
+        const primaryMatch =
+          item.title.toLowerCase().includes(q) ||
+          item.subtitle.toLowerCase().includes(q) ||
+          item.badge.toLowerCase().includes(q) ||
+          item.arabic.includes(q) ||
+          item.transliteration.toLowerCase().includes(q) ||
+          item.translationEn.toLowerCase().includes(q) ||
+          item.translationHi.toLowerCase().includes(q) ||
+          item.translationUr.toLowerCase().includes(q) ||
+          resolveDynamicText(item.translationEn).toLowerCase().includes(q) ||
+          item.reference.toLowerCase().includes(q);
+        if (!primaryMatch) {
+          const matchedAlt = item.alternates.find(
+            (alt) =>
+              alt.label.toLowerCase().includes(q) ||
+              (alt.badge && alt.badge.toLowerCase().includes(q)) ||
+              alt.arabic.includes(q) ||
+              alt.transliteration.toLowerCase().includes(q) ||
+              alt.translationEn.toLowerCase().includes(q) ||
+              alt.translationHi.toLowerCase().includes(q) ||
+              alt.translationUr.toLowerCase().includes(q) ||
+              resolveDynamicText(alt.translationEn).toLowerCase().includes(q) ||
+              alt.reference.toLowerCase().includes(q) ||
+              (alt.note && alt.note.toLowerCase().includes(q))
+          );
+          if (matchedAlt) return matchedAlt.id;
+        }
+      }
+      return 'primary';
+    },
+    [query, resolveDynamicText, selectedVariants]
   );
 
   const filteredItems = useMemo(() => {
@@ -135,19 +270,40 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         return false;
       }
       if (!q) return true;
-      return (
+      const primaryMatch =
         item.title.toLowerCase().includes(q) ||
         item.subtitle.toLowerCase().includes(q) ||
         item.badge.toLowerCase().includes(q) ||
+        item.arabic.includes(q) ||
         item.transliteration.toLowerCase().includes(q) ||
         item.translationEn.toLowerCase().includes(q) ||
         item.translationHi.toLowerCase().includes(q) ||
         item.translationUr.toLowerCase().includes(q) ||
         resolveDynamicText(item.translationEn).toLowerCase().includes(q) ||
-        item.reference.toLowerCase().includes(q)
+        item.reference.toLowerCase().includes(q) ||
+        item.note.toLowerCase().includes(q);
+      if (primaryMatch) return true;
+      return Boolean(
+        item.alternates?.some(
+          (alt) =>
+            alt.label.toLowerCase().includes(q) ||
+            (alt.badge && alt.badge.toLowerCase().includes(q)) ||
+            alt.arabic.includes(q) ||
+            alt.transliteration.toLowerCase().includes(q) ||
+            alt.translationEn.toLowerCase().includes(q) ||
+            alt.translationHi.toLowerCase().includes(q) ||
+            alt.translationUr.toLowerCase().includes(q) ||
+            resolveDynamicText(alt.translationEn).toLowerCase().includes(q) ||
+            alt.reference.toLowerCase().includes(q) ||
+            (alt.note && alt.note.toLowerCase().includes(q))
+        )
       );
     });
   }, [activeCategory, query, resolveDynamicText]);
+
+  filteredRef.current = filteredItems;
+  const getActiveVariantIdRef = useRef(getActiveVariantId);
+  getActiveVariantIdRef.current = getActiveVariantId;
 
   const stopSpeech = useCallback(() => {
     playbackSessionRef.current += 1;
@@ -158,28 +314,93 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     }
   }, []);
 
-  // Pre-warm visible Dua & Kalima audio files in background for instant playback
+  // Pre-warm human EveryAyah / Dua / Kalima MP3s and local Qari audio files into CacheStorage
   useEffect(() => {
     const controller = new AbortController();
-    const urls = filteredItems
-      .map((item) => getPrimaryAudioUrl(item))
-      .filter((u): u is string => Boolean(u));
+    const urlSet = new Set<string>();
+    const enqueueSource = (src: Pick<DuaOrKalimaItem, 'audioUrl' | 'fallbackAudioUrl' | 'quranRange' | 'quranRef'>) => {
+      if (src.audioUrl) {
+        urlSet.add(src.audioUrl);
+      } else if (src.quranRange) {
+        for (let a = src.quranRange.startAyah; a <= src.quranRange.endAyah; a++) {
+          urlSet.add(getEveryAyahUrl(reciter.everyAyahFolder, src.quranRange.surahId, a));
+        }
+      } else if (src.quranRef) {
+        urlSet.add(
+          getEveryAyahUrl(
+            reciter.everyAyahFolder,
+            src.quranRef.surahId,
+            src.quranRef.ayahNumber
+          )
+        );
+      }
+      if (src.fallbackAudioUrl) urlSet.add(src.fallbackAudioUrl);
+    };
+
+    for (const item of filteredItems) {
+      enqueueSource(item);
+      if (item.alternates) {
+        for (const alt of item.alternates) {
+          enqueueSource(alt);
+        }
+      }
+    }
+    const audioUrls = Array.from(urlSet);
 
     let cursor = 0;
     const worker = async () => {
       while (!controller.signal.aborted) {
         const idx = cursor++;
-        if (idx >= urls.length) return;
-        await ensureAudioCached(urls[idx], controller.signal);
+        if (idx >= audioUrls.length) return;
+        const url = audioUrls[idx];
+        const cached = await ensureAudioCached(url, controller.signal);
+        if (cached && !controller.signal.aborted) {
+          void analyzeSpeechBounds(url);
+        }
       }
     };
 
     void Promise.all(
-      Array.from({ length: Math.min(3, urls.length) }, () => worker())
+      Array.from({ length: Math.min(3, audioUrls.length) }, () => worker())
     );
 
+    const localQariItems = filteredItems.filter((item) => !getPrimaryAudioUrl(item));
+    if (localQariItems.length > 0) {
+      void prefetchAiTtsAudio(
+        localQariItems.map((item) => ({
+          text: item.arabic,
+          voiceName: 'Charon',
+          style: QARI_TTS_STYLES.dua,
+        })),
+        { signal: controller.signal, concurrency: 2, delayMs: 0 }
+      );
+    }
+
     return () => controller.abort();
-  }, [filteredItems, getPrimaryAudioUrl]);
+  }, [filteredItems, getPrimaryAudioUrl, reciter.everyAyahFolder]);
+
+  // Smooth auto-scroll active item into clear safe view during playback
+  useEffect(() => {
+    if (!activeId || !isPlaying || !autoScrollEnabled) return;
+    const runScroll = () => scrollTargetIntoCenter(`dua-card-${activeId}`);
+    const raf = window.requestAnimationFrame(runScroll);
+    const timer = window.setTimeout(runScroll, 120);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [activeId, isPlaying, autoScrollEnabled]);
+
+  // Keep OS audio pipeline alive across sequential Dua/Kalima transitions
+  useEffect(() => {
+    if (isPlaying && !keepaliveHeldRef.current) {
+      keepaliveHeldRef.current = true;
+      startBackgroundAudioKeepalive();
+    } else if (!isPlaying && keepaliveHeldRef.current) {
+      keepaliveHeldRef.current = false;
+      stopBackgroundAudioKeepalive();
+    }
+  }, [isPlaying]);
 
   // Keep playbackRate synced with ReaderSettings
   useEffect(() => {
@@ -188,10 +409,24 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     }
   }, [settings.playbackSpeed]);
 
+  // Keep Web Audio Voice Tone DSP synced with ReaderSettings
+  useEffect(() => {
+    if (audioRef.current) {
+      applyVoiceTimbreProfile(
+        audioRef.current,
+        settings.qariVoiceProfile ?? 'recorded'
+      );
+    }
+  }, [settings.qariVoiceProfile]);
+
   // Clean up audio & speech synthesis on unmount
   useEffect(() => {
     return () => {
       stopSpeech();
+      if (keepaliveHeldRef.current) {
+        keepaliveHeldRef.current = false;
+        stopBackgroundAudioKeepalive();
+      }
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
@@ -207,23 +442,49 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       try {
         window.speechSynthesis.cancel();
         const voices = window.speechSynthesis.getVoices();
-        const arabicVoice =
-          voices.find((v) => v.lang.toLowerCase().startsWith('ar')) ?? null;
+        const { voice: arabicVoice, pitch } = selectRegionalArabicVoice(
+          voices,
+          settings.qariVoiceProfile ?? 'recorded'
+        );
 
         const utterance = new SpeechSynthesisUtterance(
           normalizeArabicForSpeech(item.arabic)
         );
         utterance.lang = arabicVoice?.lang || 'ar-SA';
         if (arabicVoice) utterance.voice = arabicVoice;
+        utterance.pitch = pitch;
         utterance.rate = Math.max(0.65, Math.min(1.3, settings.playbackSpeed * 0.9));
+        setSpeechCharIndex(null);
+        utterance.onboundary = (ev) => {
+          if (typeof ev.charIndex === 'number') {
+            setSpeechCharIndex(ev.charIndex);
+          }
+        };
 
         utterance.onend = () => {
-          setIsPlaying(false);
           setIsSpeechFallback(false);
+          setSpeechCharIndex(null);
+          if (queueFlagRef.current) {
+            const list = filteredRef.current;
+            const idx = list.findIndex((d) => d.id === item.id);
+            if (idx >= 0 && idx < list.length - 1) {
+              const nextBase = list[idx + 1];
+              const nextResolved = resolveEffectiveDuaItem(
+                nextBase,
+                getActiveVariantIdRef.current(nextBase)
+              );
+              startPlaybackRef.current(nextResolved, true);
+              return;
+            }
+          }
+          setIsQueuePlaying(false);
+          setIsPlaying(false);
         };
         utterance.onerror = () => {
           setIsPlaying(false);
           setIsSpeechFallback(false);
+          setSpeechCharIndex(null);
+          setIsQueuePlaying(false);
           setAudioErrorId(item.id);
         };
 
@@ -236,11 +497,64 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         return false;
       }
     },
-    [settings.playbackSpeed]
+    [settings.playbackSpeed, settings.qariVoiceProfile]
+  );
+
+  const attachUrlAndAnalyze = useCallback(
+    (audio: HTMLAudioElement, url: string, verseIndexForRange?: number) => {
+      activeAudioUrlRef.current = url;
+      clearAudioUnlockFlag(audio);
+      audio.muted = false;
+      void analyzeSpeechBounds(url).then((bounds) => {
+        if (bounds && typeof verseIndexForRange === 'number' && bounds.durationSec > 0) {
+          rangeDurationsRef.current[verseIndexForRange] = bounds.durationSec;
+        }
+        if (activeAudioUrlRef.current === url) {
+          setActiveSpeechBounds(bounds);
+        }
+      });
+    },
+    []
+  );
+
+  const tryExternalOrSpeechFallback = useCallback(
+    (item: DuaOrKalimaItem) => {
+      const audio = audioRef.current;
+      if (audio && item.audioUrl && !externalAttemptedRef.current.has(item.id)) {
+        externalAttemptedRef.current.add(item.id);
+        const extSrc = getCachedAudioSrc(item.audioUrl);
+        attachUrlAndAnalyze(audio, extSrc);
+        audio.src = extSrc;
+        audio.load();
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
+        audio.playbackRate = settings.playbackSpeed;
+        setIsAiVoice(false);
+        setIsFallbackAudioSource(false);
+        setIsBuffering(true);
+        setIsPlaying(true);
+        audio.play().catch((err) => {
+          if (err?.name === 'AbortError' || audio.error) return;
+          setIsBuffering(false);
+          if (!tryArabicSpeechFallback(item)) {
+            setIsPlaying(false);
+            setIsQueuePlaying(false);
+            setAudioErrorId(item.id);
+          }
+        });
+        return;
+      }
+
+      if (!tryArabicSpeechFallback(item)) {
+        setIsPlaying(false);
+        setIsQueuePlaying(false);
+        setAudioErrorId(item.id);
+      }
+    },
+    [attachUrlAndAnalyze, settings.playbackSpeed, settings.qariVoiceProfile, tryArabicSpeechFallback]
   );
 
   const synthesizeAndPlayAiVoice = useCallback(
-    async (item: DuaOrKalimaItem, session: number) => {
+    async (item: DuaOrKalimaItem, session: number, asFallback = false) => {
       const audio = audioRef.current;
       aiAttemptedRef.current.add(item.id);
 
@@ -252,29 +566,30 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         style: QARI_TTS_STYLES.dua,
       });
       if (audio && cachedUrl) {
+        attachUrlAndAnalyze(audio, cachedUrl);
         if (audio.src !== cachedUrl) {
           audio.src = cachedUrl;
           audio.load();
         } else {
           audio.currentTime = 0;
         }
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
         audio.playbackRate = settings.playbackSpeed;
         setIsAiVoice(true);
+        setIsFallbackAudioSource(asFallback);
         setIsBuffering(false);
         setIsPlaying(true);
         audio.play().catch((err) => {
           if (err?.name === 'AbortError' || audio.error) return;
-          if (!tryArabicSpeechFallback(item)) {
-            setIsPlaying(false);
-            setIsQueuePlaying(false);
-            setAudioErrorId(item.id);
-          }
+          setIsAiVoice(false);
+          tryExternalOrSpeechFallback(item);
         });
         return;
       }
 
       unlockAudioElement(audio);
       setIsAiVoice(true);
+      setIsFallbackAudioSource(asFallback);
       setIsBuffering(true);
       setIsPlaying(true);
 
@@ -288,8 +603,10 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         if (playbackSessionRef.current !== session || ctrl.signal.aborted) return;
         if (!audio) throw new Error('Audio element missing');
 
+        attachUrlAndAnalyze(audio, blobUrl);
         audio.src = blobUrl;
         audio.load();
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
         audio.playbackRate = settings.playbackSpeed;
         setIsBuffering(false);
         await audio.play();
@@ -298,14 +615,98 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setIsBuffering(false);
         setIsAiVoice(false);
-        if (!tryArabicSpeechFallback(item)) {
-          setIsPlaying(false);
-          setIsQueuePlaying(false);
-          setAudioErrorId(item.id);
-        }
+        tryExternalOrSpeechFallback(item);
       }
     },
-    [settings.playbackSpeed, tryArabicSpeechFallback]
+    [attachUrlAndAnalyze, settings.playbackSpeed, settings.qariVoiceProfile, tryExternalOrSpeechFallback]
+  );
+
+  const playQuranRangeVerseAt = useCallback(
+    (item: DuaOrKalimaItem, verseOffset: number, seekSec = 0) => {
+      const audio = audioRef.current;
+      const quranUrl = getPrimaryAudioUrl(item, verseOffset);
+      if (!audio || !quranUrl) return;
+
+      activeVerseIndexRef.current = verseOffset;
+      setActiveVerseIndex(verseOffset);
+      setActiveSpeechBounds(null);
+      setIsFallbackAudioSource(false);
+      pendingSeekSecRef.current = seekSec > 0 ? seekSec : null;
+      setCurrentTime(seekSec);
+      setDuration(rangeDurationsRef.current[verseOffset] ?? 0);
+
+      const playableSrc = getCachedAudioSrc(quranUrl);
+      attachUrlAndAnalyze(
+        audio,
+        playableSrc,
+        item.quranRange && !item.audioUrl ? verseOffset : undefined
+      );
+      if (audio.src !== playableSrc) {
+        audio.src = playableSrc;
+        audio.load();
+      } else {
+        audio.currentTime = seekSec;
+        pendingSeekSecRef.current = null;
+      }
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
+      audio.playbackRate = settings.playbackSpeed;
+      setIsBuffering(true);
+      setIsPlaying(true);
+
+      if (item.quranRange && !item.audioUrl) {
+        const total = item.quranRange.endAyah - item.quranRange.startAyah + 1;
+        for (let look = 1; look <= 2; look++) {
+          if (verseOffset + look < total) {
+            const nextUrl = getPrimaryAudioUrl(item, verseOffset + look);
+            if (nextUrl) {
+              void ensureAudioCached(nextUrl).then((cached) => {
+                if (cached) void analyzeSpeechBounds(nextUrl);
+              });
+            }
+          }
+        }
+      }
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          if (err?.name === 'AbortError' || audio.error) return;
+          setIsBuffering(false);
+          if (item.fallbackAudioUrl && !fallbackAttemptedRef.current.has(item.id)) {
+            fallbackAttemptedRef.current.add(item.id);
+            setIsFallbackAudioSource(true);
+            const fbSrc = getCachedAudioSrc(item.fallbackAudioUrl);
+            attachUrlAndAnalyze(audio, fbSrc);
+            audio.src = fbSrc;
+            audio.load();
+            applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
+            audio.playbackRate = settings.playbackSpeed;
+            audio.play().catch((fbErr) => {
+              if (fbErr?.name === 'AbortError' || audio.error) return;
+              if (!aiAttemptedRef.current.has(item.id)) {
+                void synthesizeAndPlayAiVoice(item, playbackSessionRef.current, true);
+              } else {
+                tryExternalOrSpeechFallback(item);
+              }
+            });
+            return;
+          }
+          if (!aiAttemptedRef.current.has(item.id)) {
+            void synthesizeAndPlayAiVoice(item, playbackSessionRef.current, true);
+          } else {
+            tryExternalOrSpeechFallback(item);
+          }
+        });
+      }
+    },
+    [
+      attachUrlAndAnalyze,
+      getPrimaryAudioUrl,
+      settings.playbackSpeed,
+      settings.qariVoiceProfile,
+      synthesizeAndPlayAiVoice,
+      tryExternalOrSpeechFallback,
+    ]
   );
 
   const startPlaybackForItem = useCallback(
@@ -316,70 +717,60 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       onPauseReaderAudio?.();
       setAudioErrorId(null);
       setIsSpeechFallback(false);
+      setSpeechCharIndex(null);
       setIsAiVoice(false);
-      if (!preserveQueue) {
-        setIsQueuePlaying(false);
-      }
+      setIsFallbackAudioSource(false);
+      setActiveSpeechBounds(null);
+      activeAudioUrlRef.current = null;
+      activeVerseIndexRef.current = 0;
+      setActiveVerseIndex(0);
+      rangeDurationsRef.current = {};
+      pendingSeekSecRef.current = null;
+      queueFlagRef.current = preserveQueue;
+      setIsQueuePlaying(preserveQueue);
 
       activeItemRef.current = item;
       setActiveId(item.id);
       fallbackAttemptedRef.current.delete(item.id);
+      externalAttemptedRef.current.delete(item.id);
       aiAttemptedRef.current.delete(item.id);
+      setCurrentTime(0);
+      setDuration(0);
 
-      const primaryUrl = getPrimaryAudioUrl(item);
+      const primaryUrl = getPrimaryAudioUrl(item, 0);
       if (!audio || !primaryUrl) {
-        setCurrentTime(0);
-        setDuration(0);
-        void synthesizeAndPlayAiVoice(item, session);
+        void synthesizeAndPlayAiVoice(item, session, false);
         return;
       }
 
-      const playableSrc = getCachedAudioSrc(primaryUrl);
-      if (audio.src !== playableSrc) {
-        audio.src = playableSrc;
-        audio.load();
-      } else {
-        audio.currentTime = 0;
+      if (primaryUrl === item.audioUrl) {
+        externalAttemptedRef.current.add(item.id);
       }
-      setCurrentTime(0);
-      setDuration(0);
-      audio.playbackRate = settings.playbackSpeed;
-      setIsBuffering(true);
-      setIsPlaying(true);
 
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          if (err?.name === 'AbortError' || audio.error) return;
-          setIsBuffering(false);
-          if (!aiAttemptedRef.current.has(item.id)) {
-            void synthesizeAndPlayAiVoice(item, session);
-          } else if (!tryArabicSpeechFallback(item)) {
-            setIsPlaying(false);
-            setIsQueuePlaying(false);
-            setAudioErrorId(item.id);
-          }
-        });
-      }
+      playQuranRangeVerseAt(item, 0, 0);
     },
     [
       getPrimaryAudioUrl,
       onPauseReaderAudio,
-      settings.playbackSpeed,
+      playQuranRangeVerseAt,
       stopSpeech,
       synthesizeAndPlayAiVoice,
-      tryArabicSpeechFallback,
     ]
   );
 
+  const startPlaybackRef = useRef(startPlaybackForItem);
+  startPlaybackRef.current = startPlaybackForItem;
+
   const handleToggleRecite = (item: DuaOrKalimaItem) => {
     const audio = audioRef.current;
+    const shouldAutoplay = settings.autoplayQueue !== false;
 
     if (activeId === item.id && isPlaying) {
       stopSpeech();
       if (audio && !audio.paused) {
         audio.pause();
       }
+      queueFlagRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
       setIsSpeechFallback(false);
@@ -387,32 +778,37 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       return;
     }
 
-    // Resume paused item smoothly if same audio source is loaded
+    // Resume paused item smoothly if same audio source is still loaded mid-recitation
     if (
       activeId === item.id &&
       !isPlaying &&
       !isSpeechFallback &&
       audio &&
       audio.src &&
+      !audio.ended &&
       audio.readyState >= 1
     ) {
       onPauseReaderAudio?.();
       setAudioErrorId(null);
+      queueFlagRef.current = shouldAutoplay;
+      setIsQueuePlaying(shouldAutoplay);
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
       setIsPlaying(true);
       audio.play().catch(() => {
-        startPlaybackForItem(item, false);
+        startPlaybackForItem(item, shouldAutoplay);
       });
       return;
     }
 
-    startPlaybackForItem(item, false);
+    startPlaybackForItem(item, shouldAutoplay);
   };
 
   const handleTogglePlayAll = () => {
     if (isQueuePlaying && isPlaying) {
       stopSpeech();
       audioRef.current?.pause();
+      queueFlagRef.current = false;
       setIsPlaying(false);
       setIsBuffering(false);
       setIsQueuePlaying(false);
@@ -420,18 +816,209 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     }
     if (!filteredItems.length) return;
     setLoopActiveItem(false);
+    setAutoScrollEnabled(true);
+    queueFlagRef.current = true;
     setIsQueuePlaying(true);
-    const startItem =
+    const rawStart =
       (activeId && filteredItems.find((d) => d.id === activeId)) ||
       filteredItems[0];
-    startPlaybackForItem(startItem, true);
+    const resolvedStart = resolveEffectiveDuaItem(rawStart, getActiveVariantId(rawStart));
+    startPlaybackForItem(resolvedStart, true);
   };
+
+  const handleStepQueue = useCallback(
+    (dir: -1 | 1) => {
+      if (!filteredItems.length) return;
+      const idx = activeId
+        ? filteredItems.findIndex((d) => d.id === activeId)
+        : 0;
+      const nextIdx =
+        idx < 0
+          ? 0
+          : Math.min(filteredItems.length - 1, Math.max(0, idx + dir));
+      const target = filteredItems[nextIdx];
+      if (target) {
+        const resolved = resolveEffectiveDuaItem(target, getActiveVariantId(target));
+        startPlaybackForItem(resolved, isQueuePlaying || isPlaying);
+      }
+    },
+    [filteredItems, activeId, startPlaybackForItem, isQueuePlaying, isPlaying, getActiveVariantId]
+  );
+
+  const handleSelectVariant = useCallback(
+    (baseItem: DuaOrKalimaItem, variantId: string) => {
+      setSelectedVariants((prev) => ({ ...prev, [baseItem.id]: variantId }));
+      if (activeId === baseItem.id) {
+        const nextResolved = resolveEffectiveDuaItem(baseItem, variantId);
+        if (isPlaying) {
+          startPlaybackForItem(nextResolved, queueFlagRef.current);
+        } else {
+          stopSpeech();
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.removeAttribute('src');
+            audioRef.current.load();
+          }
+          activeItemRef.current = nextResolved;
+          setActiveId(null);
+          setCurrentTime(0);
+          setDuration(0);
+          setActiveSpeechBounds(null);
+          setAudioErrorId(null);
+        }
+      }
+    },
+    [activeId, isPlaying, startPlaybackForItem, stopSpeech]
+  );
+
+  const activeDuaItem = useMemo(() => {
+    if (!activeId) return null;
+    const base = DUAS_AND_KALIMAS.find((d) => d.id === activeId);
+    if (!base) return null;
+    return resolveEffectiveDuaItem(base, getActiveVariantId(base));
+  }, [activeId, getActiveVariantId]);
+
+  const arabicVerseRanges = useMemo(
+    () => (activeDuaItem ? getArabicVerseWeightRanges(activeDuaItem.arabic) : []),
+    [activeDuaItem]
+  );
+
+  const activeRangeBounds = useMemo(() => {
+    if (
+      !activeDuaItem?.quranRange ||
+      activeDuaItem.audioUrl ||
+      arabicVerseRanges.length <= 1 ||
+      isAiVoice ||
+      isSpeechFallback
+    ) {
+      return { startRatio: 0, endRatio: 1 };
+    }
+    const found = arabicVerseRanges[activeVerseIndex];
+    return found
+      ? { startRatio: found.startRatio, endRatio: found.endRatio }
+      : { startRatio: 0, endRatio: 1 };
+  }, [activeDuaItem, arabicVerseRanges, activeVerseIndex, isAiVoice, isSpeechFallback]);
+
+  const isEveryAyahMultiVerse = Boolean(
+    activeDuaItem?.quranRange && !activeDuaItem.audioUrl && !isAiVoice && !isSpeechFallback
+  );
+  const canUseWordTimings = Boolean(
+    activeDuaItem?.wordTimings?.length &&
+      !isSpeechFallback &&
+      !isFallbackAudioSource &&
+      !isEveryAyahMultiVerse
+  );
+
+  const smoothProgress = useSmoothAudioProgress({
+    audioRef,
+    isPlaying,
+    isBuffering,
+    isSpeechFallback,
+    fallbackTextLength: activeDuaItem?.arabic.length ?? 50,
+    playbackSpeed: settings.playbackSpeed,
+    currentTime,
+    duration,
+    speechBounds: activeSpeechBounds,
+    wordTimings: canUseWordTimings ? activeDuaItem?.wordTimings ?? null : null,
+    arabicText: activeDuaItem?.arabic ?? '',
+    rangeStart: activeRangeBounds.startRatio,
+    rangeEnd: activeRangeBounds.endRatio,
+  });
+
+  // Follow active highlighted Arabic word inside tall Dua cards
+  useEffect(() => {
+    if (!activeId || !isPlaying || isBuffering || !autoScrollEnabled) return;
+    scrollActiveWordIntoView(`dua-card-${activeId}`);
+  }, [activeId, isPlaying, isBuffering, autoScrollEnabled, smoothProgress]);
+
+  useEffect(() => {
+    if (!activeDuaItem) return;
+    updateBackgroundMediaSession({
+      title: activeDuaItem.title,
+      artist: activeDuaItem.reference,
+      album: 'Noor Recite · Duas & Adhkar Reading Mode',
+      isPlaying,
+      onPlay: () => {
+        if (!isPlaying) startPlaybackRef.current(activeDuaItem, queueFlagRef.current);
+      },
+      onPause: () => {
+        if (isPlaying) {
+          stopSpeech();
+          audioRef.current?.pause();
+          setIsPlaying(false);
+        }
+      },
+      onNext: () => handleStepQueue(1),
+      onPrev: () => handleStepQueue(-1),
+    });
+  }, [activeDuaItem, isPlaying, handleStepQueue, stopSpeech]);
+
+  const getMultiVerseTotalAndOffset = useCallback(() => {
+    if (!activeDuaItem?.quranRange || activeDuaItem.audioUrl) {
+      return {
+        totalVerses: 1,
+        aggregateTime: currentTime,
+        aggregateDuration: duration,
+      };
+    }
+    const totalVerses =
+      activeDuaItem.quranRange.endAyah - activeDuaItem.quranRange.startAyah + 1;
+    const weights =
+      arabicVerseRanges.length === totalVerses
+        ? arabicVerseRanges.map((r) => Math.max(1, r.totalWeight))
+        : Array.from({ length: totalVerses }, () => 1);
+    const activeW = weights[activeVerseIndex] ?? 1;
+    const activeDur =
+      duration > 0 ? duration : rangeDurationsRef.current[activeVerseIndex] ?? 4.5;
+    const secPerWeight = activeDur / Math.max(1, activeW);
+
+    let aggregateDuration = 0;
+    let aggregateTime = 0;
+    for (let i = 0; i < totalVerses; i++) {
+      const est = rangeDurationsRef.current[i] ?? Math.max(1.8, weights[i] * secPerWeight);
+      aggregateDuration += est;
+      if (i < activeVerseIndex) {
+        aggregateTime += est;
+      } else if (i === activeVerseIndex) {
+        aggregateTime += Math.min(currentTime, est);
+      }
+    }
+    return { totalVerses, aggregateTime, aggregateDuration, weights, secPerWeight };
+  }, [activeDuaItem, arabicVerseRanges, activeVerseIndex, currentTime, duration]);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
-    if (!audio || !duration || isSpeechFallback) return;
+    if (!audio || isSpeechFallback) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
+    const ratio = Math.min(
+      1,
+      Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width))
+    );
+
+    if (activeDuaItem?.quranRange && !activeDuaItem.audioUrl && !isAiVoice) {
+      const info = getMultiVerseTotalAndOffset();
+      const targetSec = ratio * info.aggregateDuration;
+      let acc = 0;
+      for (let i = 0; i < info.totalVerses; i++) {
+        const est =
+          rangeDurationsRef.current[i] ??
+          Math.max(1.8, (info.weights?.[i] ?? 1) * (info.secPerWeight ?? 1));
+        if (targetSec <= acc + est || i === info.totalVerses - 1) {
+          const localSec = Math.max(0, Math.min(est - 0.1, targetSec - acc));
+          if (i === activeVerseIndexRef.current && audio.readyState >= 1) {
+            audio.currentTime = localSec;
+            setCurrentTime(localSec);
+          } else {
+            playQuranRangeVerseAt(activeDuaItem, i, localSec);
+          }
+          return;
+        }
+        acc += est;
+      }
+      return;
+    }
+
+    if (!duration) return;
     const nextSec = ratio * duration;
     audio.currentTime = nextSec;
     setCurrentTime(nextSec);
@@ -445,7 +1032,22 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       return;
     }
 
-    // Auto-increment dhikr counter cleanly when recitation finishes
+    // Advance sequentially through all verses when streaming a multi-verse quranRange
+    if (currentItem.quranRange && !currentItem.audioUrl && !isAiVoice && !isSpeechFallback) {
+      const totalVerses =
+        currentItem.quranRange.endAyah - currentItem.quranRange.startAyah + 1;
+      const d = audioRef.current?.duration;
+      if (d && Number.isFinite(d) && d > 0) {
+        rangeDurationsRef.current[activeVerseIndexRef.current] = d;
+      }
+      const nextVerseIdx = activeVerseIndexRef.current + 1;
+      if (nextVerseIdx < totalVerses) {
+        playQuranRangeVerseAt(currentItem, nextVerseIdx, 0);
+        return;
+      }
+    }
+
+    // Auto-increment dhikr counter cleanly when full recitation finishes
     if (currentItem.recommendedCount) {
       setCounts((prev) => ({
         ...prev,
@@ -453,22 +1055,34 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       }));
     }
 
-    if (loopActiveItem && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.playbackRate = settings.playbackSpeed;
-      audioRef.current.play().catch(() => {
-        setIsPlaying(false);
-      });
-      return;
+    if (loopFlagRef.current) {
+      if (currentItem.quranRange && !currentItem.audioUrl && !isAiVoice) {
+        playQuranRangeVerseAt(currentItem, 0, 0);
+        return;
+      }
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        applyVoiceTimbreProfile(
+          audioRef.current,
+          settings.qariVoiceProfile ?? 'recorded'
+        );
+        audioRef.current.playbackRate = settings.playbackSpeed;
+        audioRef.current.play().catch(() => {
+          setIsPlaying(false);
+        });
+        return;
+      }
     }
 
-    if (isQueuePlaying) {
-      const idx = filteredItems.findIndex((d) => d.id === currentItem.id);
-      if (idx >= 0 && idx < filteredItems.length - 1) {
-        const nextItem = filteredItems[idx + 1];
-        startPlaybackForItem(nextItem, true);
-        const cardEl = document.getElementById(`dua-card-${nextItem.id}`);
-        cardEl?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (queueFlagRef.current) {
+      const idx = filteredRef.current.findIndex((d) => d.id === currentItem.id);
+      if (idx >= 0 && idx < filteredRef.current.length - 1) {
+        const nextItem = filteredRef.current[idx + 1];
+        const nextResolved = resolveEffectiveDuaItem(
+          nextItem,
+          getActiveVariantIdRef.current(nextItem)
+        );
+        startPlaybackForItem(nextResolved, true);
         return;
       }
       setIsQueuePlaying(false);
@@ -487,17 +1101,40 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       return;
     }
 
+    if (item.audioUrl && !externalAttemptedRef.current.has(item.id)) {
+      externalAttemptedRef.current.add(item.id);
+      const extSrc = getCachedAudioSrc(item.audioUrl);
+      attachUrlAndAnalyze(audio, extSrc);
+      audio.src = extSrc;
+      audio.load();
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
+      audio.playbackRate = settings.playbackSpeed;
+      audio.play().catch((err) => {
+        if (err?.name === 'AbortError' || audio.error) return;
+        setIsBuffering(false);
+        if (!tryArabicSpeechFallback(item)) {
+          setIsPlaying(false);
+          setIsQueuePlaying(false);
+          setAudioErrorId(item.id);
+        }
+      });
+      return;
+    }
+
     if (item.fallbackAudioUrl && !fallbackAttemptedRef.current.has(item.id)) {
       fallbackAttemptedRef.current.add(item.id);
+      setIsFallbackAudioSource(true);
       const fbSrc = getCachedAudioSrc(item.fallbackAudioUrl);
+      attachUrlAndAnalyze(audio, fbSrc);
       audio.src = fbSrc;
       audio.load();
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
       audio.play().catch((err) => {
         if (err?.name === 'AbortError' || audio.error) return;
         setIsBuffering(false);
         if (!aiAttemptedRef.current.has(item.id)) {
-          void synthesizeAndPlayAiVoice(item, playbackSessionRef.current);
+          void synthesizeAndPlayAiVoice(item, playbackSessionRef.current, true);
         } else if (!tryArabicSpeechFallback(item)) {
           setIsPlaying(false);
           setIsQueuePlaying(false);
@@ -508,7 +1145,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     }
 
     if (!aiAttemptedRef.current.has(item.id)) {
-      void synthesizeAndPlayAiVoice(item, playbackSessionRef.current);
+      void synthesizeAndPlayAiVoice(item, playbackSessionRef.current, true);
       return;
     }
 
@@ -554,39 +1191,80 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 space-y-6">
       <audio
         ref={audioRef}
+        crossOrigin="anonymous"
         preload="auto"
         onLoadedMetadata={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
           const d = e.currentTarget.duration;
-          if (Number.isFinite(d) && d > 0) setDuration(d);
+          if (Number.isFinite(d) && d > 0) {
+            setDuration(d);
+            if (activeItemRef.current?.quranRange && !activeItemRef.current.audioUrl) {
+              rangeDurationsRef.current[activeVerseIndexRef.current] = d;
+            }
+          }
+          if (pendingSeekSecRef.current !== null) {
+            e.currentTarget.currentTime = pendingSeekSecRef.current;
+            pendingSeekSecRef.current = null;
+          }
         }}
-        onPlaying={() => setIsBuffering(false)}
-        onWaiting={() => setIsBuffering(true)}
+        onPlaying={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          applyVoiceTimbreProfile(
+            e.currentTarget,
+            settings.qariVoiceProfile ?? 'recorded'
+          );
+          setIsBuffering(false);
+        }}
+        onWaiting={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          setIsBuffering(true);
+        }}
         onTimeUpdate={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
           setCurrentTime(e.currentTarget.currentTime);
           const d = e.currentTarget.duration;
-          if (Number.isFinite(d) && d > 0) setDuration(d);
+          if (Number.isFinite(d) && d > 0) {
+            setDuration(d);
+            if (activeItemRef.current?.quranRange && !activeItemRef.current.audioUrl) {
+              rangeDurationsRef.current[activeVerseIndexRef.current] = d;
+            }
+          }
         }}
-        onEnded={handleTrackEnded}
-        onError={handleTrackError}
+        onEnded={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          handleTrackEnded();
+        }}
+        onError={(e) => {
+          if (isUnlockingAudioEvent(e.currentTarget)) return;
+          handleTrackError();
+        }}
       />
 
-      {/* Header + Inline Language Switcher */}
+      {/* Header + Inline Language & Voice Switchers */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="space-y-1.5">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#022C22] dark:text-[#E6FFF4]">
             Duas &amp; Six Kalimas
           </h1>
           <p className="text-sm text-[#404944] dark:text-emerald-200/80 max-w-2xl">
-            Essential daily supplications, the Six Kalimas, Qur&apos;anic Rabbana prayers, Ayatul Kursi, and Prophetic adhkar with audio recitation, Arabic script, transliteration, and translations in 7 languages.
+            Essential daily duas, the Six Kalimas, Qur&apos;anic prayers, and Prophetic adhkar with Arabic audio, word highlighting, transliteration, and translations in 13 languages.
           </p>
         </div>
 
-        <LanguagePillSelector
-          activeLang={activeLang}
-          onSelectLanguage={onSelectLanguage}
-          isTranslating={isTranslating}
-          className="self-start md:self-auto shrink-0"
-        />
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto shrink-0">
+          {onSelectVoiceProfile && (
+            <VoiceProfilePillSelector
+              activeProfile={settings.qariVoiceProfile ?? 'recorded'}
+              onSelectProfile={onSelectVoiceProfile}
+              align="left"
+            />
+          )}
+          <LanguagePillSelector
+            activeLang={activeLang}
+            onSelectLanguage={onSelectLanguage}
+            isTranslating={isTranslating}
+          />
+        </div>
       </div>
 
       {/* Category Filters + Recite All + Search */}
@@ -616,6 +1294,21 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         </div>
 
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
+          {onToggleAutoplayQueue && (
+            <button
+              type="button"
+              onClick={onToggleAutoplayQueue}
+              aria-pressed={settings.autoplayQueue !== false}
+              title="Automatically advance to the next Dua or Kalima when playback finishes"
+              className={`min-h-[38px] px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                settings.autoplayQueue !== false
+                  ? 'border-[#064E3B]/25 bg-[#064E3B]/8 text-[#064E3B] dark:border-emerald-400/35 dark:bg-emerald-400/15 dark:text-emerald-200'
+                  : 'border-[#064E3B]/15 bg-white text-[#404944] dark:border-emerald-300/15 dark:bg-[#0A2921] dark:text-emerald-200/70'
+              }`}
+            >
+              Autoplay: {settings.autoplayQueue !== false ? 'On' : 'Off'}
+            </button>
+          )}
           {filteredItems.length > 0 && (
             <button
               type="button"
@@ -623,18 +1316,18 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
               className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap inline-flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
                 isQueuePlaying && isPlaying
                   ? 'bg-[#D97706] text-white dark:bg-amber-400 dark:text-[#022C22]'
-                  : 'bg-[#064E3B]/8 text-[#064E3B] hover:bg-[#064E3B] hover:text-[#FEF3C7] dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22]'
+                  : 'bg-[#064E3B] text-[#FEF3C7] hover:bg-[#003527] dark:bg-emerald-500 dark:text-[#022C22]'
               }`}
             >
               {isQueuePlaying && isPlaying ? (
                 <>
                   <Pause className="w-3.5 h-3.5 fill-current" />
-                  <span>Pause Sequence</span>
+                  <span>Pause Reading Mode</span>
                 </>
               ) : (
                 <>
-                  <ListMusic className="w-3.5 h-3.5" />
-                  <span>Recite All ({filteredItems.length})</span>
+                  <ScrollText className="w-3.5 h-3.5" />
+                  <span>Reading Mode ({filteredItems.length})</span>
                 </>
               )}
             </button>
@@ -654,6 +1347,69 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         </div>
       </div>
 
+      {/* Active Reading Mode Control Strip */}
+      {(isQueuePlaying || (isPlaying && activeDuaItem)) && activeDuaItem && (
+        <div
+          data-reading-strip="true"
+          className="sticky top-2 z-20 rounded-2xl border border-[#D97706]/35 dark:border-amber-400/35 bg-[#FFFFFF]/95 dark:bg-[#041D17]/95 backdrop-blur-md px-4 py-2.5 shadow-md flex flex-wrap items-center justify-between gap-2.5"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ScrollText className="w-4 h-4 text-[#D97706] dark:text-amber-300 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-[#022C22] dark:text-[#E6FFF4] truncate">
+                Reading Mode · {activeDuaItem.title}
+              </p>
+              <p className="text-[11px] text-[#0F766E] dark:text-emerald-300/85 truncate">
+                {activeDuaItem.reference}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setAutoScrollEnabled((v) => !v)}
+              aria-pressed={autoScrollEnabled}
+              className={`min-h-[32px] px-2.5 rounded-full text-[11px] font-semibold transition-colors ${
+                autoScrollEnabled
+                  ? 'bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-200'
+                  : 'text-[#404944] hover:bg-[#064E3B]/6 dark:text-emerald-200/70'
+              }`}
+            >
+              {autoScrollEnabled ? 'Auto-Scroll On' : 'Auto-Scroll Off'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepQueue(-1)}
+              aria-label="Previous Dua or Kalima"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C22] hover:bg-[#064E3B]/8 dark:text-[#E6FFF4]"
+            >
+              <SkipBack className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleTogglePlayAll}
+              aria-label={isPlaying ? 'Pause Reading Mode' : 'Resume Reading Mode'}
+              className="w-8 h-8 rounded-full bg-[#D97706] text-white dark:bg-amber-400 dark:text-[#022C22] flex items-center justify-center"
+            >
+              {isPlaying ? (
+                <Pause className="w-3.5 h-3.5 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleStepQueue(1)}
+              aria-label="Next Dua or Kalima"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#022C22] hover:bg-[#064E3B]/8 dark:text-[#E6FFF4]"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Cards Grid */}
       {filteredItems.length === 0 ? (
         <div className="rounded-2xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] p-10 text-center space-y-2 ayah-card-resting">
@@ -666,15 +1422,23 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredItems.map((item, idx) => {
-            const count = counts[item.id] ?? 0;
-            const target = item.recommendedCount;
-            const isSelectedItem = activeId === item.id;
+          {filteredItems.map((baseItem, idx) => {
+            const activeVariantId = getActiveVariantId(baseItem);
+            const item = resolveEffectiveDuaItem(baseItem, activeVariantId);
+            const count = counts[baseItem.id] ?? 0;
+            const target = baseItem.recommendedCount;
+            const isSelectedItem = activeId === baseItem.id;
             const isPlayingThis = isSelectedItem && isPlaying;
             const isBufferingThis = isSelectedItem && isBuffering && isPlaying;
+            const multiInfo =
+              isSelectedItem && item.quranRange && !item.audioUrl && !isAiVoice
+                ? getMultiVerseTotalAndOffset()
+                : null;
+            const displayTime = multiInfo ? multiInfo.aggregateTime : currentTime;
+            const displayDuration = multiInfo ? multiInfo.aggregateDuration : duration;
             const progressRatio =
-              isSelectedItem && duration > 0
-                ? Math.min(1, Math.max(0, currentTime / duration))
+              isSelectedItem && displayDuration > 0
+                ? Math.min(1, Math.max(0, displayTime / displayDuration))
                 : 0;
             const localizedTranslation =
               activeLang === 'hi'
@@ -687,8 +1451,8 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
 
             return (
               <article
-                id={`dua-card-${item.id}`}
-                key={item.id}
+                id={`dua-card-${baseItem.id}`}
+                key={baseItem.id}
                 className={`rounded-2xl border p-5 sm:p-7 transition-all duration-200 space-y-4 ${
                   isPlayingThis
                     ? 'ayah-card-active border-[1.5px] border-[#D97706]/45 dark:border-amber-400/50 bg-gradient-to-b from-[#064E3B]/[0.025] to-[#D97706]/[0.045] dark:from-emerald-950/70 dark:to-amber-950/25'
@@ -716,10 +1480,10 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                         </span>
                       </div>
                       <h2 className="mt-1 text-base sm:text-lg font-bold text-[#022C22] dark:text-[#E6FFF4]">
-                        {item.title}
+                        {baseItem.title}
                       </h2>
                       <p className="text-xs text-[#0F766E] dark:text-emerald-300/85">
-                        {item.subtitle}
+                        {baseItem.subtitle}
                       </p>
                     </div>
                   </div>
@@ -793,6 +1557,43 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                   </div>
                 </div>
 
+                {/* Alternate Authentic Narrations Switcher */}
+                {baseItem.alternates && baseItem.alternates.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#0F766E] dark:text-emerald-300/85 mr-1">
+                      Narrations ({baseItem.alternates.length + 1}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectVariant(baseItem, 'primary')}
+                      className={`min-h-[30px] px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                        activeVariantId === 'primary'
+                          ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
+                          : 'bg-[#064E3B]/6 text-[#404944] hover:text-[#022C22] dark:bg-emerald-400/10 dark:text-emerald-200/80 dark:hover:text-white'
+                      }`}
+                    >
+                      {baseItem.primaryVariantLabel ?? 'Standard Narration'}
+                    </button>
+                    {baseItem.alternates.map((alt) => {
+                      const isVarActive = activeVariantId === alt.id;
+                      return (
+                        <button
+                          key={alt.id}
+                          type="button"
+                          onClick={() => handleSelectVariant(baseItem, alt.id)}
+                          className={`min-h-[30px] px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                            isVarActive
+                              ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
+                              : 'bg-[#064E3B]/6 text-[#404944] hover:text-[#022C22] dark:bg-emerald-400/10 dark:text-emerald-200/80 dark:hover:text-white'
+                          }`}
+                        >
+                          {alt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Inline Audio Scrubber for Actively Selected Dua / Kalima */}
                 {isSelectedItem && (
                   <div className="rounded-xl bg-[#064E3B]/[0.04] dark:bg-emerald-400/10 px-3.5 py-2.5 flex items-center gap-2.5 sm:gap-3">
@@ -812,13 +1613,18 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                       </div>
                     ) : (
                       <>
+                        {multiInfo && (
+                          <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/20 dark:text-emerald-200 shrink-0">
+                            Verse {activeVerseIndex + 1}/{multiInfo.totalVerses}
+                          </span>
+                        )}
                         <div
                           onClick={handleSeek}
                           role="slider"
                           aria-label={`Seek ${item.title} recitation`}
                           aria-valuemin={0}
-                          aria-valuemax={Math.round(duration || 1)}
-                          aria-valuenow={Math.round(currentTime)}
+                          aria-valuemax={Math.round(displayDuration || 1)}
+                          aria-valuenow={Math.round(displayTime)}
                           tabIndex={0}
                           className="relative flex-1 h-2 rounded-full bg-[#064E3B]/15 dark:bg-emerald-300/20 cursor-pointer overflow-hidden"
                         >
@@ -828,7 +1634,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                           />
                         </div>
                         <span className="text-[11px] font-semibold tabular-nums text-[#404944] dark:text-emerald-200/85 shrink-0">
-                          {formatDuration(currentTime)} / {formatDuration(duration)}
+                          {formatDuration(displayTime)} / {formatDuration(displayDuration)}
                         </span>
                       </>
                     )}
@@ -850,36 +1656,55 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                   </div>
                 )}
 
-                {/* Arabic Script */}
-                <p
-                  dir="rtl"
-                  className={`${fontClass} text-right leading-[2.1] text-[#022C22] dark:text-[#E6FFF4] pt-1`}
-                  style={{
-                    fontSize: `${Math.max(24, Math.min(36, settings.arabicFontSize))}px`,
-                  }}
-                >
-                  {item.arabic}
-                </p>
+                {/* Arabic Script with Word-by-Word Highlighting */}
+                <HighlightedArabicText
+                  text={item.arabic}
+                  isActive={isPlayingThis && !isBufferingThis}
+                  progressRatio={isSelectedItem ? smoothProgress : 0}
+                  highlightStyle={settings.highlightStyle}
+                  speechCharIndex={
+                    isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                  }
+                  fontClass={fontClass}
+                  fontSize={Math.max(24, Math.min(36, settings.arabicFontSize))}
+                  lineHeight={2.1}
+                  className="pt-1"
+                />
 
-                {/* Transliteration & Translation */}
+                {/* Synchronized Transliteration & Translation */}
                 {(settings.showTransliteration || settings.showTranslation) && (
                   <div className="space-y-2.5 min-w-0 break-words">
                     {settings.showTransliteration && (
-                      <p className="text-[14px] font-medium italic leading-relaxed text-[#0F766E] dark:text-emerald-300/90 break-words">
-                        {item.transliteration}
-                      </p>
+                      <HighlightedSyncText
+                        text={item.transliteration}
+                        arabicText={item.arabic}
+                        isActive={isPlayingThis && !isBufferingThis}
+                        progressRatio={isSelectedItem ? smoothProgress : 0}
+                        speechCharIndex={
+                          isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                        }
+                        variant="transliteration"
+                        className="text-[14px] font-medium italic leading-relaxed text-[#0F766E] dark:text-emerald-300/90 break-words"
+                      />
                     )}
 
                     {settings.showTranslation && (
-                      <p
+                      <HighlightedSyncText
+                        text={localizedTranslation}
+                        arabicText={item.arabic}
+                        isActive={isPlayingThis && !isBufferingThis}
+                        progressRatio={isSelectedItem ? smoothProgress : 0}
+                        speechCharIndex={
+                          isSelectedItem && isSpeechFallback ? speechCharIndex : null
+                        }
+                        variant="translation"
+                        lang={activeLang}
                         dir={isRtlTranslationLang(activeLang) ? 'rtl' : 'ltr'}
                         className={`text-[#022C22]/90 dark:text-[#D0FAEA]/95 break-words ${getTranslationTextClass(
                           activeLang,
                           'card'
                         )}`}
-                      >
-                        {localizedTranslation}
-                      </p>
+                      />
                     )}
                   </div>
                 )}

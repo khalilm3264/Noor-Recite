@@ -1,6 +1,7 @@
 import { HadithItem } from '../types/quran';
+import { HADITH_WORD_TIMINGS, expandWordTimings } from './hadithWordTimings';
 
-export const POPULAR_HADITHS: HadithItem[] = [
+const BASE_POPULAR_HADITHS: HadithItem[] = [
   {
     id: 'hadith-intentions',
     category: 'faith',
@@ -21,7 +22,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih al-Bukhari 1 · Sahih Muslim 1907 · Wasā’il al-Shī‘ah 1:47',
     grading: 'Muttafaqun ‘Alayh · Shared Principle',
     lessonEn:
-      'Even ordinary daily acts—eating, working, resting, or studying—become worship when done sincerely for Allah’s pleasure.',
+      'Everyday lawful acts like eating, working, resting, and studying become worship with sincere intention.',
     lessonHi:
       'सच्ची और ख़ालिस नियत से रोज़मर्रा के जायज़ काम भी अल्लाह की इबादत बन जाते हैं।',
     lessonUr:
@@ -104,7 +105,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Al-Kāfī, Vol. 2, p. 104',
     grading: 'Sahih (Shia Collection)',
     lessonEn:
-      'Outward ritual must produce inner honesty—keeping promises, returning trusts, and speaking truthfully define genuine devotion.',
+      'True devotion shows in honest speech, keeping promises, and fulfilling trusts, not outer habits alone.',
     lessonHi:
       'सच्ची इबादत इंसान के लेन-देन की ईमानदारी, वादे की पाबंदी और सच्ची ज़बान में झलकती है।',
     lessonUr:
@@ -130,9 +131,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Jami‘ at-Tirmidhi 2517',
     grading: 'Hasan',
     lessonEn:
-      'Reliance on Allah (Tawakkul) is never an excuse for negligence—take responsible steps first and entrust the outcome to Him.',
+      'Reliance on Allah (Tawakkul) pairs practical responsibility with trust in His decree.',
     lessonHi:
-      'तवक्कुल का मतलब आलस नहीं—अपनी पूरी मेहनत और एहतियात करने के बाद नतीजा अल्लाह के सुपुर्द करें।',
+      'तवक्कुल का मतलब आलस नहीं; अपनी पूरी मेहनत और एहतियात करने के बाद नतीजा अल्लाह के सुपुर्द करें।',
     lessonUr:
       'توکل کا مطلب تدبیر چھوڑنا نہیں، بلکہ پوری ذمہ داری اور کوشش کے بعد نتیجہ اللہ کے سپرد کرنا ہے۔',
   },
@@ -156,9 +157,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih Muslim 2664',
     grading: 'Sahih',
     lessonEn:
-      'Pair spiritual, mental, and physical strength with humility and du‘a—avoid helplessness and keep moving forward.',
+      'Pair spiritual, mental, and physical strength with humility and du‘a instead of giving in to helplessness.',
     lessonHi:
-      'मेहनत, हिम्मत और अल्लाह से दुआ—इन तीनों को साथ लेकर आगे बढ़ने वाला मोमिन कमज़ोरी से ऊपर उठता है।',
+      'मेहनत, हिम्मत और अल्लाह से दुआ, इन तीनों को साथ लेकर आगे बढ़ने वाला मोमिन कमज़ोरी से ऊपर उठता है।',
     lessonUr:
       'عزم، محنت اور اللہ کی مدد پر بھروسا انسان کو مایوسی اور سستی سے نکال کر آگے بڑھاتا ہے۔',
   },
@@ -176,17 +177,17 @@ export const POPULAR_HADITHS: HadithItem[] = [
     translationEn:
       'The lawful is clear and the unlawful is clear, and between them are doubtful matters that many people do not know... Truly, in the body there is a morsel of flesh which, if it is sound, the whole body is sound; and if it is corrupt, the whole body is corrupt. Truly, it is the heart.',
     translationHi:
-      'बेशक हलाल वाज़ेह (साफ़) है और हराम भी वाज़ेह है, और दोनों के बीच कुछ शुब्हे वाली चीज़ें हैं... सुनो! जिस्म में गोश्त का एक टुकड़ा है: अगर वह दुरुस्त हो जाए तो पूरा जिस्म दुरुस्त हो जाता है, और अगर वह बिगड़ जाए तो पूरा जिस्म बिगड़ जाता है—सुनो, वह दिल है।',
+      'बेशक हलाल वाज़ेह (साफ़) है और हराम भी वाज़ेह है, और दोनों के बीच कुछ शुब्हे वाली चीज़ें हैं... सुनो! जिस्म में गोश्त का एक टुकड़ा है: अगर वह दुरुस्त हो जाए तो पूरा जिस्म दुरुस्त हो जाता है, और अगर वह बिगड़ जाए तो पूरा जिस्म बिगड़ जाता है; सुनो, वह दिल है।',
     translationUr:
-      'بے شک حلال واضح ہے اور حرام بھی واضح ہے، اور ان دونوں کے درمیان کچھ مشتبہ چیزیں ہیں... خبردار! جسم میں گوشت کا ایک لوتھڑا ہے، اگر وہ درست ہو تو سارا جسم درست رہتا ہے اور اگر وہ خراب ہو جائے تو سارا جسم خراب ہو جاتا ہے—جان لو وہ دل ہے۔',
+      'بے شک حلال واضح ہے اور حرام بھی واضح ہے، اور ان دونوں کے درمیان کچھ مشتبہ چیزیں ہیں... خبردار! جسم میں گوشت کا ایک لوتھڑا ہے، اگر وہ درست ہو تو سارا جسم درست رہتا ہے اور اگر وہ خراب ہو جائے تو سارا جسم خراب ہو جاتا ہے؛ جان لو وہ دل ہے۔',
     reference: 'Sahih al-Bukhari 52 · Sahih Muslim 1599',
     grading: 'Muttafaqun ‘Alayh',
     lessonEn:
-      'Spiritual health starts in the heart: guarding what enters our earnings, eyes, and habits keeps the heart clear and peaceful.',
+      'Spiritual health begins in the heart. Guarding earnings, sights, and habits keeps the heart clear.',
     lessonHi:
-      'रूहानी और अख़लाक़ी सलामती दिल की पाकीज़गी से जुड़ी है—शक वाली चीज़ों से बचना ईमान की हिफ़ाज़त है।',
+      'रूहानी और अख़लाक़ी सलामती दिल की पाकीज़गी से जुड़ी है; शक वाली चीज़ों से बचना ईमान की हिफ़ाज़त है।',
     lessonUr:
-      'روحانی اور اخلاقی صحت دل کی پاکیزگی سے جڑی ہے—مشکوک چیزوں سے پرہیز دین اور عزت کی حفاظت ہے۔',
+      'روحانی اور اخلاقی صحت دل کی پاکیزگی سے جڑی ہے؛ مشکوک چیزوں سے پرہیز دین اور عزت کی حفاظت ہے۔',
   },
   {
     id: 'hadith-love-brother',
@@ -208,7 +209,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih al-Bukhari 13 · Sahih Muslim 45 · Al-Kāfī 2:170',
     grading: 'Muttafaqun ‘Alayh · Shared Principle',
     lessonEn:
-      'Complete faith uproots envy and selfishness—wishing others peace, success, and goodness enriches our own hearts.',
+      'Complete faith removes envy and selfishness; wishing peace and success for others enriches your own heart.',
     lessonHi:
       'सच्चा ईमान हसद और ख़ुदग़र्ज़ी को ख़त्म कर दूसरों की भलाई चाहने का जज़्बा पैदा करता है।',
     lessonUr:
@@ -258,9 +259,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Nahj al-Balāghah, Letter 53',
     grading: 'Authentic Classic (Shia Tradition)',
     lessonEn:
-      'Dignity, fairness, and compassion belong to every human being—shared humanity demands mercy even toward those who differ from us.',
+      'Dignity, fairness, and compassion belong to every person as equals in humanity.',
     lessonHi:
-      'इंसानी बराबरी और हमदर्दी हर इंसान का हक़ है—चाहे वह हम-अक़ीदा हो या न हो।',
+      'इंसानी बराबरी और हमदर्दी हर इंसान का हक़ है, चाहे वह हम-अक़ीदा हो या न हो।',
     lessonUr:
       'انسانیت کا احترام، عدل اور رحم دلی ہر انسان کا حق ہے خواہ اس کا عقیدہ مختلف ہی کیوں نہ ہو۔',
   },
@@ -330,9 +331,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     translationEn:
       'Among the most beloved deeds to Allah Almighty is bringing joy to a believer: feeding them when hungry, relieving their distress, or settling their debt.',
     translationHi:
-      'अल्लाह तआला को सबसे पसंदीदा काम किसी मोमिन के दिल में ख़ुशी दाख़िल करना है—उसकी भूख मिटाना, उसकी मुसीबत दूर करना, या उसका क़र्ज़ अदा कर देना।',
+      'अल्लाह तआला को सबसे पसंदीदा काम किसी मोमिन के दिल में ख़ुशी दाख़िल करना है: उसकी भूख मिटाना, उसकी मुसीबत दूर करना, या उसका क़र्ज़ अदा कर देना।',
     translationUr:
-      'اللہ تعالیٰ کے نزدیک سب سے محبوب عمل کسی مومن کے دل میں خوشی داخل کرنا ہے—اس کی بھوک مٹانا، اس کی پریشانی دور کرنا، یا اس کا قرض ادا کرنا۔',
+      'اللہ تعالیٰ کے نزدیک سب سے محبوب عمل کسی مومن کے دل میں خوشی داخل کرنا ہے: اس کی بھوک مٹانا، اس کی پریشانی دور کرنا، یا اس کا قرض ادا کرنا۔',
     reference: 'Al-Kāfī, Vol. 2, p. 192',
     grading: 'Sahih (Shia Collection)',
     lessonEn:
@@ -416,7 +417,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih al-Bukhari 6117 · Sahih Muslim 37',
     grading: 'Muttafaqun ‘Alayh',
     lessonEn:
-      'Hayā’ is moral self-respect—being too dignified to stoop to cruelty, vulgarity, or shamelessness in public or private.',
+      'Hayā’ is moral dignity that keeps a person away from cruelty, vulgarity, and shame in public and private.',
     lessonHi:
       'सच्ची हया इंसान को बुरे बोल, बे-हयाई और ज़ुल्म से रोककर शराफ़त की हिफ़ाज़त करती है।',
     lessonUr:
@@ -444,7 +445,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     lessonEn:
       'Compassion toward family, neighbors, strangers, and even animals is one of the surest ways to invite Allah’s mercy.',
     lessonHi:
-      'इंसानों और जानवरों—ज़मीन के हर मख़लूक़ के साथ नरमी और रहमदिली अल्लाह की रहमत को खींचती है।',
+      'इंसानों और जानवरों, ज़मीन के हर मख़लूक़ के साथ नरमी और रहमदिली अल्लाह की रहमत को खींचती है।',
     lessonUr:
       'انسانوں اور تمام مخلوقات کے ساتھ نرمی اور رحم دلی اللہ تعالیٰ کی رحمت کو اپنی طرف متوجہ کرتی ہے۔',
     quranRef: {
@@ -473,7 +474,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih al-Bukhari 6116',
     grading: 'Sahih',
     lessonEn:
-      'True strength is mastering your tongue and temper in the moment of provocation—pause, seek refuge from Shaytan, and respond gently.',
+      'Real strength is mastering your tongue and temper under provocation, pausing before responding gently.',
     lessonHi:
       'असली ताक़त ग़ुस्से के वक़्त ख़ुद पर और अपनी ज़बान पर क़ाबू रखने में है।',
     lessonUr:
@@ -499,11 +500,11 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Jami‘ at-Tirmidhi 1956',
     grading: 'Sahih',
     lessonEn:
-      'Charity does not require wealth—warmth, helpfulness, and encouraging what is good count as daily sadaqah.',
+      'Charity needs no wealth. Warmth, helpfulness, and good words are daily sadaqah.',
     lessonHi:
-      'सदक़ा सिर्फ़ पैसे से नहीं होता—मुस्कान, मदद और अच्छी बात कहना भी रोज़ाना का सदक़ा है।',
+      'सदक़ा सिर्फ़ पैसे से नहीं होता; मुस्कान, मदद और अच्छी बात कहना भी रोज़ाना का सदक़ा है।',
     lessonUr:
-      'صدقہ صرف مال سے نہیں ہوتا—خندہ پیشانی، رہنمائی اور بھلائی کی بات کہنا بھی روزانہ کا صدقہ ہے۔',
+      'صدقہ صرف مال سے نہیں ہوتا؛ خندہ پیشانی، رہنمائی اور بھلائی کی بات کہنا بھی روزانہ کا صدقہ ہے۔',
   },
   {
     id: 'hadith-best-character',
@@ -523,7 +524,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih al-Bukhari 3559 · Sahih Muslim 2321',
     grading: 'Muttafaqun ‘Alayh',
     lessonEn:
-      'Nobility in Islam is measured by gentleness, honesty, humility, and patience with others—especially inside one’s home.',
+      'Nobility is measured by gentleness, honesty, humility, and patience, especially at home.',
     lessonHi:
       'इस्लाम में इंसान की बुज़ुर्गी और मर्तबा उसके अच्छे अख़लाक़, नरमी और सच्चाई से नापा जाता है।',
     lessonUr:
@@ -551,9 +552,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     lessonEn:
       'Three social pillars of faith: mindful speech (online and offline), kindness to neighbors, and generous hospitality.',
     lessonHi:
-      'ज़बान की हिफ़ाज़त, पड़ोसियों से अच्छा बर्ताव और मेहमाननवाज़ी—ये तीनों सच्चे ईमान की निशानियाँ हैं।',
+      'ज़बान की हिफ़ाज़त, पड़ोसियों से अच्छा बर्ताव और मेहमाननवाज़ी, ये तीनों सच्चे ईमान की निशानियाँ हैं।',
     lessonUr:
-      'زبان کی حفاظت، پڑوسی سے حسنِ سلوک اور مہمان نوازی—یہ تینوں سچے ایمان کی علامات ہیں۔',
+      'زبان کی حفاظت، پڑوسی سے حسنِ سلوک اور مہمان نوازی، یہ تینوں سچے ایمان کی علامات ہیں۔',
   },
   {
     id: 'hadith-ali-three-ranks-worship',
@@ -567,11 +568,11 @@ export const POPULAR_HADITHS: HadithItem[] = [
     transliteration:
       'Inna qawman ‘abadullāha raghbatan fa-tilka ‘ibādatut-tujjār, wa inna qawman ‘abadullāha rahbatan fa-tilka ‘ibādatul-‘abīd, wa inna qawman ‘abadullāha shukran fa-tilka ‘ibādatul-aḥrār.',
     translationEn:
-      'A group worships Allah out of desire for reward—that is the worship of merchants. A group worships Allah out of fear of punishment—that is the worship of slaves. And a group worships Allah out of gratitude and love—that is the worship of free souls.',
+      'Some worship Allah desiring reward, which is the worship of merchants; some worship out of fear of punishment, which is the worship of slaves; and some worship out of gratitude and love, which is the worship of free souls.',
     translationHi:
-      'कुछ लोग सवाब के लालच में अल्लाह की इबादत करते हैं—यह व्यापारियों की इबादत है; कुछ लोग अज़ाब के डर से इबादत करते हैं—यह ग़ुलामों की इबादत है; और कुछ लोग अल्लाह के शुक्र और मोहब्बत में इबादत करते हैं—यही आज़ाद रूहों की इबादत है।',
+      'कुछ लोग सवाब के लालच में अल्लाह की इबादत करते हैं, यह व्यापारियों की इबादत है; कुछ लोग अज़ाब के डर से इबादत करते हैं, यह ग़ुलामों की इबादत है; और कुछ लोग अल्लाह के शुक्र और मोहब्बत में इबादत करते हैं, यही आज़ाद रूहों की इबादत है।',
     translationUr:
-      'کچھ لوگ ثواب کی رغبت میں اللہ کی عبادت کرتے ہیں—یہ تاجروں کی عبادت ہے؛ کچھ لوگ خوفِ عذاب سے عبادت کرتے ہیں—یہ غلاموں کی عبادت ہے؛ اور کچھ لوگ اللہ کا شکر بجا لانے اور محبت میں عبادت کرتے ہیں—یہ آزاد لوگوں کی عبادت ہے۔',
+      'کچھ لوگ ثواب کی رغبت میں اللہ کی عبادت کرتے ہیں، یہ تاجروں کی عبادت ہے؛ کچھ لوگ خوفِ عذاب سے عبادت کرتے ہیں، یہ غلاموں کی عبادت ہے؛ اور کچھ لوگ اللہ کا شکر بجا لانے اور محبت میں عبادت کرتے ہیں، یہ آزاد لوگوں کی عبادت ہے۔',
     reference: 'Nahj al-Balāghah, Saying 237',
     grading: 'Authentic Classic (Shia Tradition)',
     lessonEn:
@@ -645,17 +646,17 @@ export const POPULAR_HADITHS: HadithItem[] = [
     transliteration:
       '‘Ajaban li-amril-mu’min, inna amrahū kulluhū khayr, wa laysa dhālika li-aḥadin illā lil-mu’min: in aṣābat-hu sarrā’u shakara fa-kāna khayran lah, wa in aṣābat-hu ḍarrā’u ṣabara fa-kāna khayran lah.',
     translationEn:
-      'How wondrous is the affair of the believer, for all of his affairs are good—and this applies to no one except the believer: if prosperity reaches him, he gives thanks and that is good for him; and if hardship befalls him, he endures with patience and that is good for him.',
+      'How wondrous is the affair of the believer, for all of their affairs are good, and this belongs only to the believer: when ease comes, they give thanks and it is good for them; when hardship strikes, they endure with patience and it is good for them.',
     translationHi:
-      'मोमिन का मामला कितना अजीब (ख़ूबसूरत) है! उसका हर हाल उसके लिए बेहतर है—अगर उसे ख़ुशी मिले तो शुक्र करता है और यह उसके लिए ख़ैर है, और अगर तकलीफ़ पहुँचे तो सब्र करता है और यह भी उसके लिए ख़ैर है।',
+      'मोमिन का मामला कितना ख़ूबसूरत है! उसका हर हाल उसके लिए बेहतर है: अगर उसे ख़ुशी मिले तो शुक्र करता है और यह उसके लिए ख़ैर है, और अगर तकलीफ़ पहुँचे तो सब्र करता है और यह भी उसके लिए ख़ैर है।',
     translationUr:
       'مومن کا معاملہ بھی کتنا عجیب ہے کہ اس کا ہر حال خیر ہی خیر ہے: اگر اسے راحت ملتی ہے تو شکر ادا کرتا ہے اور یہ اس کے لیے بہتر ہے، اور اگر کوئی تکلیف پہنچتی ہے تو صبر کرتا ہے اور یہ بھی اس کے لیے بہتر ہے۔',
     reference: 'Sahih Muslim 2999',
     grading: 'Sahih',
     lessonEn:
-      'With shukr in ease and sabr in hardship, every season of life becomes a source of reward.',
+      'Gratitude in ease and patience in hardship turn every season of life into reward.',
     lessonHi:
-      'ख़ुशी में शुक्र और मुश्किल में सब्र—ये दो पंख मोमिन को हर हालात में कामयाब रखते हैं।',
+      'ख़ुशी में शुक्र और मुश्किल में सब्र, ये दो चीज़ें मोमिन को हर हालात में कामयाब रखती हैं।',
     lessonUr:
       'نعمت پر شکر اور آزمائش پر صبر مومن کی زندگی کے ہر لمحے کو نیکی میں بدل دیتا ہے۔',
   },
@@ -723,9 +724,9 @@ export const POPULAR_HADITHS: HadithItem[] = [
     translationEn:
       'When Allah decreed creation, He wrote in His Book which is with Him above the Throne: “Indeed, My mercy prevails over My wrath.”',
     translationHi:
-      'जब अल्लाह ने मख़लूक़ को पैदा फ़रमाया तो अपनी किताब में—जो अर्श के ऊपर उसके पास है—लिखा: "बेशक मेरी रहमत मेरे ग़ज़ब पर ग़ालिब है।"',
+      'जब अल्लाह ने मख़लूक़ को पैदा फ़रमाया तो अपनी किताब में (जो अर्श के ऊपर उसके पास है) लिखा: "बेशक मेरी रहमत मेरे ग़ज़ब पर ग़ालिब है।"',
     translationUr:
-      'جب اللہ تعالیٰ نے مخلوق کی تخلیق فرمائی تو اپنی کتاب میں—جو عرش کے اوپر اس کے پاس ہے—تحریر فرمایا: "بے شک میری رحمت میرے غضب پر غالب ہے۔"',
+      'جب اللہ تعالیٰ نے مخلوق کی تخلیق فرمائی تو اپنی کتاب میں (جو عرش کے اوپر اس کے پاس ہے) تحریر فرمایا: "بے شک میری رحمت میرے غضب پر غالب ہے۔"',
     reference: 'Sahih al-Bukhari 3194 · Sahih Muslim 2751 · Biḥār al-Anwār 57:369',
     grading: 'Muttafaqun ‘Alayh · Shared',
     lessonEn:
@@ -810,7 +811,7 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Nahj al-Balāghah, Saying 147',
     grading: 'Authentic Classic (Shia Tradition)',
     lessonEn:
-      'Teaching others what you learn multiplies your own understanding—never hoard beneficial knowledge.',
+      'Teaching others what you learn deepens your own understanding.',
     lessonHi:
       'जो कुछ अच्छा सीखें उसे दूसरों तक पहुँचाएँ, बाँटने से इल्म और बरकत दोनों बढ़ते हैं।',
     lessonUr:
@@ -891,10 +892,16 @@ export const POPULAR_HADITHS: HadithItem[] = [
     reference: 'Sahih Muslim 2699 · Al-Kāfī 2:197',
     grading: 'Sahih · Shared Principle',
     lessonEn:
-      'Whenever you feel stuck or burdened yourself, look for someone whose load you can lighten—Allah steps in to carry yours.',
+      'Whenever you feel burdened, ease someone else’s load and Allah will step in to carry yours.',
     lessonHi:
       'दूसरों के लिए आसानी और मदद का ज़रीया बनना अल्लाह की मदद को अपनी ज़िंदगी में लाने का सबसे यक़ीनी रास्ता है।',
     lessonUr:
       'دوسروں کے لیے آسانی اور مدد کا سبب بننا اللہ کی نصرت کو اپنی زندگی میں لانے کا بہترین ذریعہ ہے۔',
   },
 ];
+
+export const POPULAR_HADITHS: HadithItem[] = BASE_POPULAR_HADITHS.map((item) => {
+  if (item.wordTimings) return item;
+  const tuples = HADITH_WORD_TIMINGS[item.id];
+  return tuples ? { ...item, wordTimings: expandWordTimings(tuples) } : item;
+});

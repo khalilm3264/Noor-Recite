@@ -26,6 +26,7 @@ import {
   ISTIADHAH_OPENER,
   RECITERS,
   SURAH_DIRECTORY,
+  SurahLanguageOverlay,
   alignTranslationSegments,
   alignWarshWordsToHafs,
   fetchChapterTimingData,
@@ -59,6 +60,17 @@ import {
   readHifzProgressEvents,
   saveHifzProgressEvents,
 } from './utils/hifzProgress';
+import { prefetchAllLocalQariAudio } from './utils/aiTts';
+import {
+  SpeechBounds,
+  analyzeSpeechBounds,
+  getSafeLeadTrimSec,
+} from './utils/speechBounds';
+import {
+  applyVoiceTimbreProfile,
+  updateBackgroundMediaSession,
+} from './utils/useSmoothReadingPlayback';
+import { DUAS_AND_KALIMAS } from './data/duasAndKalimas';
 import { MobileBottomNav, TopNav } from './components/TopNav';
 import { SurahChips } from './components/SurahChips';
 import { SurahHeaderBanner } from './components/SurahHeaderBanner';
@@ -78,6 +90,8 @@ import { SalahView } from './components/SalahView';
 import { TajweedStudioView } from './components/TajweedStudioView';
 import { BookmarksView } from './components/BookmarksView';
 import { GoogleDriveView } from './components/GoogleDriveView';
+import { PdfExportModal } from './components/PdfExportModal';
+import { PdfExportScope } from './utils/pdfExport';
 import { NoorDriveBackupPayload } from './utils/googleDriveApi';
 import {
   clearDriveAccessToken,
@@ -103,6 +117,11 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   syncOffsetSec: 0,
   riwayah: 'hafs',
   maghrebiOrthography: false,
+  readingMode: true,
+  qariVoiceProfile: 'recorded',
+  autoplayQueue: true,
+  playEntireJuz: false,
+  activeJuzNumber: 1,
 };
 
 const DEFAULT_BOOKMARK_COLLECTIONS: BookmarkCollection[] = [
@@ -215,16 +234,10 @@ const INITIAL_BOOKMARKS: BookmarkItem[] = [
     ayahNumber: 5,
     arabic: 'فَإِنَّ مَعَ ٱلْعُسْرِ يُسْرًا',
     translation: 'For indeed, with hardship comes ease.',
-    note: 'Notice "ma‘a" (with) — ease accompanies hardship concurrently.',
+    note: 'Notice "ma‘a" (with); ease accompanies hardship concurrently.',
     savedAt: 'Today',
   },
 ];
-
-interface SpeechBounds {
-  speechStartSec: number;
-  speechEndSec: number;
-  durationSec: number;
-}
 
 const STREAM_ANTICIPATION_SEC = 0.08;
 const CHAPTER_ANTICIPATION_MS = 75;
@@ -253,80 +266,6 @@ const BASMALAH_FALLBACK_TEMPLATE: VerseTiming = {
     { wordIndex: 3, startMs: 2502, endMs: 5840 },
   ],
 };
-
-let sharedDecodeCtx: AudioContext | null = null;
-function getDecodeContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (!sharedDecodeCtx) {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (AudioCtx) {
-      sharedDecodeCtx = new AudioCtx();
-    }
-  }
-  return sharedDecodeCtx;
-}
-
-function getSafeLeadTrimSec(bounds?: SpeechBounds): number {
-  if (!bounds || bounds.speechStartSec <= 0.18) return 0;
-  return Math.max(0, Number((bounds.speechStartSec - 0.09).toFixed(3)));
-}
-
-async function analyzeSpeechBounds(url: string): Promise<SpeechBounds | null> {
-  try {
-    const ctx = getDecodeContext();
-    if (!ctx) return null;
-    const cachedSrc = (await ensureAudioCached(url)) ?? url;
-    const res = await fetch(cachedSrc);
-    if (!res.ok) return null;
-    const buf = await res.arrayBuffer();
-    const audioBuf = await ctx.decodeAudioData(buf);
-    const data = audioBuf.getChannelData(0);
-    const sr = audioBuf.sampleRate;
-    const winSamples = Math.max(1, Math.floor(sr * 0.02));
-    const rmsList: number[] = [];
-    let peak = 0;
-
-    for (let i = 0; i < data.length; i += winSamples) {
-      const end = Math.min(data.length, i + winSamples);
-      let sum = 0;
-      for (let j = i; j < end; j++) {
-        const s = data[j];
-        sum += s * s;
-      }
-      const rms = Math.sqrt(sum / Math.max(1, end - i));
-      rmsList.push(rms);
-      if (rms > peak) peak = rms;
-    }
-
-    const startThresh = Math.max(0.004, peak * 0.025);
-    const endThresh = Math.max(0.002, peak * 0.012);
-    let firstWin = 0;
-    while (firstWin < rmsList.length && rmsList[firstWin] < startThresh) {
-      firstWin++;
-    }
-    let lastWin = rmsList.length - 1;
-    while (lastWin > firstWin && rmsList[lastWin] < endThresh) {
-      lastWin--;
-    }
-
-    const speechStartSec = firstWin < rmsList.length ? firstWin * 0.02 : 0;
-    const speechEndSec = Math.min(
-      audioBuf.duration,
-      Math.max(speechStartSec + 0.35, (lastWin + 1) * 0.02)
-    );
-
-    return {
-      speechStartSec,
-      speechEndSec,
-      durationSec: audioBuf.duration,
-    };
-  } catch {
-    return null;
-  }
-}
 
 function clampWordIndex(idx: number, wordCount: number): number {
   return Math.min(Math.max(0, wordCount - 1), Math.max(0, idx));
@@ -455,6 +394,74 @@ function computeWordIndexFallback(
   return ayah.words.length - 1;
 }
 
+function mergeSurahLanguageOverlay(
+  surah: Surah,
+  targetLang: Exclude<TranslationLanguage, 'en'>,
+  overlay: SurahLanguageOverlay
+): Surah {
+  const updatedAyahs = surah.ayahs.map((a) => {
+    const vData = overlay.versesByNumber[a.number];
+    if (!vData) return a;
+    const updatedWords = a.words.map((w, wIdx) => {
+      const gloss = vData.wordMeanings?.[wIdx];
+      if (!gloss) return w;
+      return {
+        ...w,
+        ...(targetLang === 'hi' ? { meaningHi: w.meaningHi || gloss } : {}),
+        ...(targetLang === 'ur' ? { meaningUr: w.meaningUr || gloss } : {}),
+        meanings: {
+          ...w.meanings,
+          [targetLang]: w.meanings?.[targetLang] || gloss,
+        },
+      };
+    });
+
+    const existingText =
+      a.translations?.[targetLang] ||
+      (targetLang === 'hi'
+        ? a.translationHi
+        : targetLang === 'ur'
+        ? a.translationUr
+        : undefined);
+    const resolvedText =
+      existingText ||
+      vData.translation ||
+      (targetLang === 'hi'
+        ? vData.translationHi
+        : targetLang === 'ur'
+        ? vData.translationUr
+        : undefined);
+
+    const existingSegs = getAyahTranslationSegments(a, targetLang);
+    const computedSegs =
+      existingSegs && existingSegs.length > 0
+        ? existingSegs
+        : resolvedText
+        ? alignTranslationSegments(resolvedText, updatedWords, targetLang)
+        : undefined;
+
+    return {
+      ...a,
+      words: updatedWords,
+      ...(targetLang === 'hi' && resolvedText ? { translationHi: resolvedText } : {}),
+      ...(targetLang === 'ur' && resolvedText ? { translationUr: resolvedText } : {}),
+      translations: resolvedText
+        ? { ...a.translations, [targetLang]: resolvedText }
+        : a.translations,
+      ...(targetLang === 'hi' && computedSegs ? { translationSegmentsHi: computedSegs } : {}),
+      ...(targetLang === 'ur' && computedSegs ? { translationSegmentsUr: computedSegs } : {}),
+      translationSegmentsByLang: computedSegs
+        ? { ...a.translationSegmentsByLang, [targetLang]: computedSegs }
+        : a.translationSegmentsByLang,
+    };
+  });
+
+  return {
+    ...surah,
+    ayahs: updatedAyahs,
+  };
+}
+
 function getSafeViewportBounds(container?: HTMLElement | null) {
   if (container) {
     const cRect = container.getBoundingClientRect();
@@ -475,7 +482,7 @@ function getSafeViewportBounds(container?: HTMLElement | null) {
 function scrollElementIntoSafeView(
   el: HTMLElement,
   container?: HTMLElement | null,
-  mode: 'auto' | 'focus' = 'auto'
+  mode: 'auto' | 'focus' | 'center' = 'auto'
 ) {
   if (!container || container.scrollHeight <= container.clientHeight + 2) {
     return;
@@ -489,7 +496,11 @@ function scrollElementIntoSafeView(
   }
 
   let delta: number;
-  if (rect.height <= safeHeight) {
+  if (mode === 'center' && rect.height <= safeHeight) {
+    const desiredTop = safeTop + Math.max(12, (safeHeight - rect.height) * 0.42);
+    delta = rect.top - desiredTop;
+    if (Math.abs(delta) < 18) return;
+  } else if (rect.height <= safeHeight) {
     const comfortTopOffset = Math.min(
       24,
       Math.max(8, (safeHeight - rect.height) * 0.22)
@@ -767,11 +778,19 @@ export default function App() {
     []
   );
 
-  const [tajweedInitialTab, setTajweedInitialTab] = useState<'rules' | 'grader' | 'qiraat'>('rules');
+  const [tajweedInitialTab, setTajweedInitialTab] = useState<
+    'rules' | 'phonemes' | 'grader' | 'qiraat'
+  >('rules');
   const [tajweedInitialTarget, setTajweedInitialTarget] = useState<{
     surahId: number;
     ayahNumber: number;
   } | null>(null);
+  const [pdfExportState, setPdfExportState] = useState<{
+    isOpen: boolean;
+    scope: PdfExportScope;
+    preselectedBookmarkKeys?: string[];
+    collectionFilter?: string;
+  }>({ isOpen: false, scope: 'surah' });
 
   const bookmarkedKeys = useMemo(
     () => new Set(bookmarks.map((b) => b.verseKey)),
@@ -853,6 +872,13 @@ export default function App() {
   const failedLangOverlayRef = useRef<Set<string>>(new Set());
   const fetchingWarshRef = useRef<Set<number>>(new Set());
   const failedWarshRef = useRef<Set<number>>(new Set());
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const activeTranslationLang: TranslationLanguage = settings.translationLanguage ?? 'en';
 
@@ -927,6 +953,10 @@ export default function App() {
       const needsWordGloss =
         targetLang !== 'ff' &&
         targetLang !== 'ha' &&
+        targetLang !== 'ru' &&
+        targetLang !== 'zh' &&
+        targetLang !== 'es' &&
+        targetLang !== 'fr' &&
         a.words.some((w) => !hasLocalizedWordMeaning(w, targetLang));
       return !hasVerseText || !hasSegs || needsWordGloss;
     });
@@ -940,69 +970,17 @@ export default function App() {
       return;
     }
 
-    let cancelled = false;
     fetchingLangOverlayRef.current.add(reqKey);
 
     fetchSurahLanguageOverlay(surahId, targetLang, activeSurah.ayahs)
       .then((overlay) => {
-        if (cancelled) return;
+        if (!isMountedRef.current) return;
         setSurahCache((prev) => {
           const current = prev[surahId];
           if (!current) return prev;
-          const updatedAyahs = current.ayahs.map((a) => {
-            const vData = overlay.versesByNumber[a.number];
-            if (!vData) return a;
-            const updatedWords = a.words.map((w, wIdx) => {
-              const gloss = vData.wordMeanings?.[wIdx];
-              if (!gloss) return w;
-              return {
-                ...w,
-                ...(targetLang === 'hi' ? { meaningHi: w.meaningHi || gloss } : {}),
-                ...(targetLang === 'ur' ? { meaningUr: w.meaningUr || gloss } : {}),
-                meanings: {
-                  ...w.meanings,
-                  [targetLang]: w.meanings?.[targetLang] || gloss,
-                },
-              };
-            });
-
-            const existingText =
-              a.translations?.[targetLang] ||
-              (targetLang === 'hi' ? a.translationHi : targetLang === 'ur' ? a.translationUr : undefined);
-            const resolvedText =
-              existingText ||
-              vData.translation ||
-              (targetLang === 'hi' ? vData.translationHi : targetLang === 'ur' ? vData.translationUr : undefined);
-
-            const existingSegs = getAyahTranslationSegments(a, targetLang);
-            const computedSegs =
-              existingSegs && existingSegs.length > 0
-                ? existingSegs
-                : resolvedText
-                ? alignTranslationSegments(resolvedText, updatedWords, targetLang)
-                : undefined;
-
-            return {
-              ...a,
-              words: updatedWords,
-              ...(targetLang === 'hi' && resolvedText ? { translationHi: resolvedText } : {}),
-              ...(targetLang === 'ur' && resolvedText ? { translationUr: resolvedText } : {}),
-              translations: resolvedText
-                ? { ...a.translations, [targetLang]: resolvedText }
-                : a.translations,
-              ...(targetLang === 'hi' && computedSegs ? { translationSegmentsHi: computedSegs } : {}),
-              ...(targetLang === 'ur' && computedSegs ? { translationSegmentsUr: computedSegs } : {}),
-              translationSegmentsByLang: computedSegs
-                ? { ...a.translationSegmentsByLang, [targetLang]: computedSegs }
-                : a.translationSegmentsByLang,
-            };
-          });
           return {
             ...prev,
-            [surahId]: {
-              ...current,
-              ayahs: updatedAyahs,
-            },
+            [surahId]: mergeSurahLanguageOverlay(current, targetLang, overlay),
           };
         });
       })
@@ -1012,10 +990,6 @@ export default function App() {
       .finally(() => {
         fetchingLangOverlayRef.current.delete(reqKey);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [activeSurah, activeTranslationLang]);
 
   // Hydrate authentic Warsh 'an Nafi' text across all 114 surahs when Warsh Riwayah is active
@@ -1210,16 +1184,14 @@ export default function App() {
         ? reciterChapterData.audioUrl
         : undefined;
 
+    const ayahCount = activeSurah.ayahs.length;
     const ayahUrls = chapterAudioUrl
       ? []
-      : activeSurah.ayahs.map((a) =>
-          getEveryAyahUrl(activeReciter.everyAyahFolder, activeSurah.id, a.number)
+      : Array.from({ length: ayahCount }, (_, idx) =>
+          getEveryAyahUrl(activeReciter.everyAyahFolder, activeSurah.id, idx + 1)
         );
 
-    const priorityIdx = Math.max(
-      0,
-      activeSurah.ayahs.findIndex((a) => a.number === activeAyah.number)
-    );
+    const priorityIdx = Math.max(0, activeAyah.number - 1);
 
     void prefetchSurahAudio({
       openerUrls,
@@ -1234,7 +1206,7 @@ export default function App() {
     activeReciter,
     activeSurah.id,
     activeSurah.hasBismillah,
-    activeSurah.ayahs,
+    activeSurah.ayahs.length,
     reciterChapterData,
     activeAyah.number,
   ]);
@@ -1279,6 +1251,16 @@ export default function App() {
   useEffect(() => {
     completionLockKeyRef.current = null;
   }, [activeSurah.id, activeAyah.verseKey, openerPhase]);
+
+  // Apply active Voice Tone DSP profile to Reader <audio>
+  useEffect(() => {
+    if (audioRef.current) {
+      applyVoiceTimbreProfile(
+        audioRef.current,
+        settings.qariVoiceProfile ?? 'recorded'
+      );
+    }
+  }, [settings.qariVoiceProfile]);
 
   // Sync dark mode class on <html>
   useEffect(() => {
@@ -1482,6 +1464,7 @@ export default function App() {
         lastAyahTagRef.current = `ea:${activeReciter.id}:${surahId}:${ayahNumber}`;
       }
 
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
       setAudioMode('stream');
       const playPromise = audio.play();
@@ -1502,6 +1485,7 @@ export default function App() {
       activeReciter.everyAyahFolder,
       chapterTimingCache,
       settings.playbackSpeed,
+      settings.qariVoiceProfile,
     ]
   );
 
@@ -1538,6 +1522,7 @@ export default function App() {
         pendingSeekSecRef.current = startSec > 0 ? startSec : null;
       }
       lastAyahTagRef.current = `op:${activeReciter.id}:${phase}`;
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
       setAudioMode('stream');
       const playPromise = audio.play();
@@ -1547,7 +1532,7 @@ export default function App() {
           .catch(() => {});
       }
     },
-    [clearTransitionTimer, activeReciter, settings.playbackSpeed]
+    [clearTransitionTimer, activeReciter, settings.playbackSpeed, settings.qariVoiceProfile]
   );
 
   // Advance through Opener (Isti'adhah -> Basmalah) -> Ayah 1 -> ... or repeat on completion
@@ -1594,8 +1579,12 @@ export default function App() {
       countedVersesRef.current.add(key);
       setVersesRecitedCount((c) => c + 1);
     }
+    const usingChapterStream =
+      isChapterAudioMode &&
+      Boolean(activeVerseTiming) &&
+      loadedSourceTagRef.current === `chapter:${activeReciter.id}:${activeSurah.id}`;
     const recitedDurSec =
-      isChapterAudioMode && activeVerseTiming
+      usingChapterStream && activeVerseTiming
         ? Math.max(
             1,
             (activeVerseTiming.timestampToMs - activeVerseTiming.timestampFromMs) /
@@ -1707,6 +1696,22 @@ export default function App() {
       setInspectedAyahNumber(firstAyah.number);
       setSelectedWordId(firstAyah.words[0]?.id ?? null);
       setDuration(ISTIADHAH_OPENER.durationSec);
+    } else if (settings.readingMode !== false) {
+      const nextId =
+        activeSurah.id >= SURAH_DIRECTORY.length ? 1 : activeSurah.id + 1;
+      const nextEntry = SURAH_DIRECTORY.find((d) => d.id === nextId);
+      if (nextEntry && openOrHydrateSurahRef.current) {
+        void openOrHydrateSurahRef.current(
+          nextEntry,
+          1,
+          true,
+          activeScreenRef.current === 'reader' ? 'reader' : null
+        );
+      } else {
+        clearTransitionTimer();
+        setIsPlaying(false);
+        setOpenerPhase(null);
+      }
     } else {
       clearTransitionTimer();
       setIsPlaying(false);
@@ -1725,6 +1730,7 @@ export default function App() {
     settings.repeatMode,
     settings.playbackSpeed,
     settings.reflectionDelaySec,
+    settings.readingMode,
     audioMode,
     isChapterAudioMode,
     activeVerseTiming,
@@ -1743,11 +1749,12 @@ export default function App() {
   useEffect(() => {
     if (!isPlaying || activeScreen !== 'reader') return;
     const container = mainScrollRef.current;
+    const scrollMode = settings.readingMode !== false ? 'center' : 'auto';
     const runScroll = () => {
       if (openerPhase !== null) {
         const openerEl = document.getElementById(`opener-${openerPhase}`);
         if (openerEl) {
-          scrollElementIntoSafeView(openerEl, container, 'auto');
+          scrollElementIntoSafeView(openerEl, container, scrollMode);
         } else if (container) {
           container.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -1755,7 +1762,7 @@ export default function App() {
       }
       const el = document.getElementById(`ayah-${activeAyah.number}`);
       if (el) {
-        scrollElementIntoSafeView(el, container, 'auto');
+        scrollElementIntoSafeView(el, container, scrollMode);
       }
     };
     const raf = window.requestAnimationFrame(runScroll);
@@ -1764,7 +1771,7 @@ export default function App() {
       window.cancelAnimationFrame(raf);
       window.clearTimeout(settleTimer);
     };
-  }, [activeAyah.number, openerPhase, isPlaying, activeScreen]);
+  }, [activeAyah.number, openerPhase, isPlaying, activeScreen, settings.readingMode]);
 
   // For extra-long verses that exceed the visible <main> height, keep the active word clear inside <main>
   useEffect(() => {
@@ -2068,6 +2075,7 @@ export default function App() {
         }
       }
 
+      applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
       audio.playbackRate = settings.playbackSpeed;
 
       const beginPlayback = () => {
@@ -2076,6 +2084,7 @@ export default function App() {
           audio.currentTime = pendingSeekSecRef.current;
           pendingSeekSecRef.current = null;
         }
+        applyVoiceTimbreProfile(audio, settings.qariVoiceProfile ?? 'recorded');
         audio.playbackRate = settings.playbackSpeed;
         const waitingInitialSeek =
           pendingSeekSecRef.current !== null &&
@@ -2197,130 +2206,166 @@ export default function App() {
     }, stepMs);
   };
 
-  // High-precision 60fps audio clock sync: updates word highlight instantaneously on change, throttles scrubber UI to ~12fps
+  // Shared frame-sync routine used both by 60fps rAF in foreground and <audio onTimeUpdate> when backgrounded
+  const syncStreamFrame = useCallback(
+    (now: number, audio: HTMLAudioElement, forceUiClock = false) => {
+      if (!audio || audio.paused) return;
+      const usingChapterStream =
+        openerPhase === null &&
+        isChapterAudioMode &&
+        Boolean(activeVerseTiming) &&
+        loadedSourceTagRef.current === `chapter:${activeReciter.id}:${activeSurah.id}`;
+
+      if (usingChapterStream && activeVerseTiming) {
+        if (pendingSeekSecRef.current !== null) {
+          if (audio.readyState >= 1) {
+            audio.currentTime = pendingSeekSecRef.current;
+            pendingSeekSecRef.current = null;
+            audio.volume = 1;
+          }
+          return;
+        }
+        if (audio.seeking) return;
+
+        const absMs = audio.currentTime * 1000;
+        const verseDurSec = Math.max(
+          0.5,
+          (activeVerseTiming.timestampToMs - activeVerseTiming.timestampFromMs) /
+            1000
+        );
+        const relTime = Math.max(
+          0,
+          Math.min(
+            verseDurSec,
+            (absMs - activeVerseTiming.timestampFromMs) / 1000
+          )
+        );
+        latestRelTimeRef.current = relTime;
+
+        const nextWord = computeWordAtClockRef.current(relTime, verseDurSec, 1);
+        if (nextWord !== lastSyncedWordRef.current) {
+          lastSyncedWordRef.current = nextWord;
+          setSyncedWordIndex(nextWord);
+        }
+
+        if (forceUiClock || now - lastUiClockUpdateRef.current >= 85) {
+          lastUiClockUpdateRef.current = now;
+          setCurrentTime(relTime);
+          setDuration(verseDurSec);
+        }
+
+        const isLastVerseOfSurah =
+          activeAyah.number ===
+          (activeSurah.ayahs[activeSurah.ayahs.length - 1]?.number ?? activeSurah.totalAyahs);
+
+        // Let the Surah's final ayah play all the way to <audio onEnded> so trailing Madd (e.g. wa lad-daalleen) is never cut off
+        if (!isLastVerseOfSurah) {
+          const rawTriggerMs = activeVerseTiming.timestampToMs;
+          const completionTriggerMs =
+            Number.isFinite(audio.duration) && audio.duration > 0
+              ? Math.min(
+                  rawTriggerMs,
+                  Math.max(
+                    activeVerseTiming.timestampFromMs + 250,
+                    audio.duration * 1000 - 40
+                  )
+                )
+              : rawTriggerMs;
+
+          if (
+            absMs >= completionTriggerMs &&
+            completionLockKeyRef.current !== activeAyah.verseKey
+          ) {
+            completionLockKeyRef.current = activeAyah.verseKey;
+            if (settings.repeatMode === 'ayah') {
+              audio.pause();
+            }
+            completionRef.current();
+          }
+        }
+      } else {
+        if (pendingSeekSecRef.current !== null) {
+          if (audio.readyState >= 1) {
+            audio.currentTime = pendingSeekSecRef.current;
+            pendingSeekSecRef.current = null;
+            audio.volume = 1;
+          }
+          return;
+        }
+        if (audio.seeking) return;
+
+        const relTime = audio.currentTime;
+        const fileDur =
+          Number.isFinite(audio.duration) && audio.duration > 0
+            ? audio.duration
+            : openerPhase !== null && activeOpener
+            ? activeOpener.durationSec
+            : activeAyah.durationSec;
+
+        latestRelTimeRef.current = relTime;
+
+        const nextWord = computeWordAtClockRef.current(relTime, fileDur, 1);
+        if (nextWord !== lastSyncedWordRef.current) {
+          lastSyncedWordRef.current = nextWord;
+          setSyncedWordIndex(nextWord);
+        }
+
+        if (forceUiClock || now - lastUiClockUpdateRef.current >= 85) {
+          lastUiClockUpdateRef.current = now;
+          setCurrentTime(relTime);
+          if (Number.isFinite(audio.duration) && audio.duration > 0) {
+            setDuration(audio.duration);
+          }
+        }
+      }
+    },
+    [
+      openerPhase,
+      activeOpener,
+      isChapterAudioMode,
+      activeVerseTiming,
+      activeSurah.id,
+      activeSurah.ayahs,
+      activeSurah.totalAyahs,
+      activeReciter.id,
+      activeAyah.number,
+      activeAyah.verseKey,
+      activeAyah.durationSec,
+      settings.repeatMode,
+    ]
+  );
+
+  const syncStreamFrameRef = useRef(syncStreamFrame);
+  useEffect(() => {
+    syncStreamFrameRef.current = syncStreamFrame;
+  }, [syncStreamFrame]);
+
+  // High-precision 60fps audio clock sync in foreground + immediate re-sync when tab returns from background
   useEffect(() => {
     if (!isPlaying || audioMode !== 'stream') return;
     let rafId = 0;
 
     const tick = (now: number) => {
       const audio = audioRef.current;
-      if (audio && !audio.paused) {
-        const usingChapterStream =
-          openerPhase === null &&
-          isChapterAudioMode &&
-          Boolean(activeVerseTiming) &&
-          loadedSourceTagRef.current === `chapter:${activeReciter.id}:${activeSurah.id}`;
-
-        if (usingChapterStream && activeVerseTiming) {
-          if (pendingSeekSecRef.current !== null) {
-            if (audio.readyState >= 1) {
-              audio.currentTime = pendingSeekSecRef.current;
-              pendingSeekSecRef.current = null;
-              audio.volume = 1;
-            }
-          } else if (!audio.seeking) {
-            const absMs = audio.currentTime * 1000;
-            const verseDurSec = Math.max(
-              0.5,
-              (activeVerseTiming.timestampToMs - activeVerseTiming.timestampFromMs) /
-                1000
-            );
-            const relTime = Math.max(
-              0,
-              Math.min(
-                verseDurSec,
-                (absMs - activeVerseTiming.timestampFromMs) / 1000
-              )
-            );
-            latestRelTimeRef.current = relTime;
-
-            const nextWord = computeWordAtClockRef.current(relTime, verseDurSec, 1);
-            if (nextWord !== lastSyncedWordRef.current) {
-              lastSyncedWordRef.current = nextWord;
-              setSyncedWordIndex(nextWord);
-            }
-
-            if (now - lastUiClockUpdateRef.current >= 85) {
-              lastUiClockUpdateRef.current = now;
-              setCurrentTime(relTime);
-              setDuration(verseDurSec);
-            }
-
-            const rawTriggerMs = activeVerseTiming.timestampToMs;
-            const completionTriggerMs =
-              Number.isFinite(audio.duration) && audio.duration > 0
-                ? Math.min(
-                    rawTriggerMs,
-                    Math.max(
-                      activeVerseTiming.timestampFromMs + 250,
-                      audio.duration * 1000 - 40
-                    )
-                  )
-                : rawTriggerMs;
-
-            if (
-              absMs >= completionTriggerMs &&
-              completionLockKeyRef.current !== activeAyah.verseKey
-            ) {
-              completionLockKeyRef.current = activeAyah.verseKey;
-              if (settings.repeatMode === 'ayah') {
-                audio.pause();
-              }
-              completionRef.current();
-            }
-          }
-        } else {
-          if (pendingSeekSecRef.current !== null) {
-            if (audio.readyState >= 1) {
-              audio.currentTime = pendingSeekSecRef.current;
-              pendingSeekSecRef.current = null;
-              audio.volume = 1;
-            }
-          } else if (!audio.seeking) {
-            const relTime = audio.currentTime;
-            const fileDur =
-              Number.isFinite(audio.duration) && audio.duration > 0
-                ? audio.duration
-                : openerPhase !== null && activeOpener
-                ? activeOpener.durationSec
-                : activeAyah.durationSec;
-
-            latestRelTimeRef.current = relTime;
-
-            const nextWord = computeWordAtClockRef.current(relTime, fileDur, 1);
-            if (nextWord !== lastSyncedWordRef.current) {
-              lastSyncedWordRef.current = nextWord;
-              setSyncedWordIndex(nextWord);
-            }
-
-            if (now - lastUiClockUpdateRef.current >= 85) {
-              lastUiClockUpdateRef.current = now;
-              setCurrentTime(relTime);
-              if (Number.isFinite(audio.duration) && audio.duration > 0) {
-                setDuration(audio.duration);
-              }
-            }
-          }
-        }
+      if (audio) {
+        syncStreamFrameRef.current(now, audio);
       }
       rafId = window.requestAnimationFrame(tick);
     };
 
+    const handleVisibilityChange = () => {
+      if (!document.hidden && audioRef.current) {
+        syncStreamFrameRef.current(performance.now(), audioRef.current, true);
+      }
+    };
+
     rafId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(rafId);
-  }, [
-    isPlaying,
-    audioMode,
-    openerPhase,
-    activeOpener,
-    isChapterAudioMode,
-    activeVerseTiming,
-    activeSurah.id,
-    activeReciter.id,
-    activeAyah.verseKey,
-    activeAyah.durationSec,
-    settings.repeatMode,
-  ]);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying, audioMode]);
 
   const openerWordIndex = openerPhase !== null ? syncedWordIndex : null;
   const activeWordIndex = openerPhase === null ? syncedWordIndex : null;
@@ -2414,30 +2459,75 @@ export default function App() {
         const fetchedRaw = await fetchSurahFromApi(entry);
         if (playbackSessionRef.current !== session) return;
 
+        const overlayTasks: Promise<void>[] = [];
         let fetched = fetchedRaw;
+
         if ((settings.riwayah ?? 'hafs') === 'warsh') {
-          try {
-            const warshOverlay = await fetchSurahWarshOverlay(entry.id);
-            if (playbackSessionRef.current !== session) return;
-            fetched = {
-              ...fetchedRaw,
-              ayahs: fetchedRaw.ayahs.map((a) => {
-                const warshArabic = warshOverlay.versesByNumber[a.number];
-                if (!warshArabic) return a;
-                const alignedWords = alignWarshWordsToHafs(warshArabic, a.words);
-                return {
-                  ...a,
-                  arabicWarsh: warshArabic,
-                  words: a.words.map((w, wIdx) => ({
-                    ...w,
-                    arabicWarsh: alignedWords[wIdx] ?? w.arabic,
-                  })),
+          overlayTasks.push(
+            fetchSurahWarshOverlay(entry.id)
+              .then((warshOverlay) => {
+                fetched = {
+                  ...fetched,
+                  ayahs: fetched.ayahs.map((a) => {
+                    const warshArabic = warshOverlay.versesByNumber[a.number];
+                    if (!warshArabic) return a;
+                    const alignedWords = alignWarshWordsToHafs(warshArabic, a.words);
+                    return {
+                      ...a,
+                      arabicWarsh: warshArabic,
+                      words: a.words.map((w, wIdx) => ({
+                        ...w,
+                        arabicWarsh: alignedWords[wIdx] ?? w.arabic,
+                      })),
+                    };
+                  }),
                 };
-              }),
-            };
-          } catch {
-            // Non-blocking: universal Warsh orthography rules still apply cleanly
-          }
+              })
+              .catch(() => {
+                // Non-blocking: universal Warsh orthography rules still apply cleanly
+              })
+          );
+        }
+
+        if (activeTranslationLang !== 'en' && activeTranslationLang !== 'ff') {
+          const targetLang = activeTranslationLang;
+          const langPromise = fetchSurahLanguageOverlay(
+            entry.id,
+            targetLang,
+            fetchedRaw.ayahs
+          )
+            .then((langOverlay) => {
+              fetched = mergeSurahLanguageOverlay(fetched, targetLang, langOverlay);
+              if (isMountedRef.current) {
+                setSurahCache((prev) =>
+                  prev[entry.id]
+                    ? {
+                        ...prev,
+                        [entry.id]: mergeSurahLanguageOverlay(
+                          prev[entry.id],
+                          targetLang,
+                          langOverlay
+                        ),
+                      }
+                    : prev
+                );
+              }
+            })
+            .catch(() => {
+              // Non-blocking: English fallback stays active if translation service is unreachable
+            });
+          // Wait briefly (up to 900ms) so fast cached/API translations appear immediately on Surah switch
+          overlayTasks.push(
+            Promise.race([
+              langPromise,
+              new Promise<void>((resolve) => window.setTimeout(resolve, 900)),
+            ])
+          );
+        }
+
+        if (overlayTasks.length > 0) {
+          await Promise.all(overlayTasks);
+          if (playbackSessionRef.current !== session) return;
         }
 
         const targetAyah =
@@ -2447,6 +2537,8 @@ export default function App() {
         setLoadingSurahId(null);
         pendingSeekSecRef.current = null;
         latestRelTimeRef.current = 0;
+        lastSyncedWordRef.current = startWithOpener || autoPlay ? 0 : null;
+        setSyncedWordIndex(startWithOpener || autoPlay ? 0 : null);
         completionLockKeyRef.current = null;
         setActiveSurahId(fetched.id);
         setActiveAyahNumber(targetAyah.number);
@@ -2498,8 +2590,14 @@ export default function App() {
       primeAudioForOpener,
       primeAudioForVerse,
       settings.riwayah,
+      activeTranslationLang,
     ]
   );
+
+  const activeScreenRef = useRef(activeScreen);
+  activeScreenRef.current = activeScreen;
+  const openOrHydrateSurahRef = useRef(openOrHydrateSurah);
+  openOrHydrateSurahRef.current = openOrHydrateSurah;
 
   const handleApplySettingsPatch = useCallback(
     (patch: Partial<ReaderSettings>) => {
@@ -2527,13 +2625,15 @@ export default function App() {
           clearTransitionTimer();
           pendingSeekSecRef.current = null;
           latestRelTimeRef.current = 0;
+          lastSyncedWordRef.current = isPlaying ? 0 : null;
+          setSyncedWordIndex(isPlaying ? 0 : null);
           completionLockKeyRef.current = null;
           setCurrentTime(0);
         }
         return next;
       });
     },
-    [clearTransitionTimer]
+    [clearTransitionTimer, isPlaying]
   );
 
   const handleOpenSurahFromDirectory = (entry: SurahDirectoryEntry) => {
@@ -2656,6 +2756,7 @@ export default function App() {
 
   const handleSelectWord = (ayah: Ayah, word: WordToken, wordIndex: number) => {
     clearTransitionTimer();
+    const wasOpener = openerPhase !== null;
     setOpenerPhase(null);
     setInspectedAyahNumber(ayah.number);
     setSelectedWordId(word.id);
@@ -2668,6 +2769,16 @@ export default function App() {
       : undefined;
     const templateVerseTiming =
       chapterTimingCache[`7-${activeSurah.id}`]?.versesByKey[ayah.verseKey];
+
+    const expectedChapterTag = `chapter:${activeReciter.id}:${activeSurah.id}`;
+    const expectedEveryAyahTag = `ayah:${activeReciter.id}:${activeSurah.id}:${ayah.number}`;
+    const canSeekInPlace =
+      !wasOpener &&
+      ayah.number === activeAyahNumber &&
+      Boolean(audioRef.current) &&
+      audioMode === 'stream' &&
+      isPlaying &&
+      (audioRef.current?.readyState ?? 0) >= 1;
 
     if (
       activeReciter.quranComId &&
@@ -2710,11 +2821,9 @@ export default function App() {
       pendingSeekSecRef.current = targetAbsSec;
 
       if (
-        ayah.number === activeAyahNumber &&
+        canSeekInPlace &&
         audioRef.current &&
-        audioMode === 'stream' &&
-        isPlaying &&
-        audioRef.current.readyState >= 1
+        loadedSourceTagRef.current === expectedChapterTag
       ) {
         audioRef.current.currentTime = targetAbsSec;
         pendingSeekSecRef.current = null;
@@ -2770,15 +2879,15 @@ export default function App() {
       setDuration(targetDur);
       setCurrentTime(seekSec);
       latestRelTimeRef.current = seekSec;
-      pendingSeekSecRef.current = ayah.number === activeAyahNumber ? null : seekSec;
+      pendingSeekSecRef.current = seekSec;
 
       if (
-        ayah.number === activeAyahNumber &&
+        canSeekInPlace &&
         audioRef.current &&
-        audioMode === 'stream' &&
-        isPlaying
+        loadedSourceTagRef.current === expectedEveryAyahTag
       ) {
         audioRef.current.currentTime = seekSec;
+        pendingSeekSecRef.current = null;
       }
     }
 
@@ -2825,6 +2934,37 @@ export default function App() {
       return [next, ...prev];
     });
   };
+
+  const cardHandlersRef = useRef({
+    playAyah: handlePlayAyah,
+    selectWord: handleSelectWord,
+    inspectAyah: handleInspectAyah,
+    toggleBookmark: handleToggleBookmark,
+  });
+  cardHandlersRef.current = {
+    playAyah: handlePlayAyah,
+    selectWord: handleSelectWord,
+    inspectAyah: handleInspectAyah,
+    toggleBookmark: handleToggleBookmark,
+  };
+
+  const stablePlayAyah = useCallback(
+    (ayahNumber: number) => cardHandlersRef.current.playAyah(ayahNumber),
+    []
+  );
+  const stableSelectWord = useCallback(
+    (ayah: Ayah, word: WordToken, wordIndex: number) =>
+      cardHandlersRef.current.selectWord(ayah, word, wordIndex),
+    []
+  );
+  const stableInspectAyah = useCallback(
+    (ayah: Ayah) => cardHandlersRef.current.inspectAyah(ayah),
+    []
+  );
+  const stableToggleBookmark = useCallback(
+    (ayah: Ayah) => cardHandlersRef.current.toggleBookmark(ayah),
+    []
+  );
 
   const handleSaveReflection = (ayah: Ayah, note: string) => {
     const localized = getLocalizedAyahTranslation(ayah);
@@ -2981,9 +3121,15 @@ export default function App() {
     );
   };
 
+  const isChapterStreamLoaded =
+    openerPhase === null &&
+    isChapterAudioMode &&
+    Boolean(activeVerseTiming) &&
+    loadedSourceTagRef.current === `chapter:${activeReciter.id}:${activeSurah.id}`;
+
   const handleSeekRatio = (ratio: number) => {
     clearTransitionTimer();
-    if (openerPhase === null && isChapterAudioMode && activeVerseTiming) {
+    if (isChapterStreamLoaded && activeVerseTiming) {
       const verseStartSec = activeVerseTiming.timestampFromMs / 1000;
       const verseDurSec = Math.max(
         0.5,
@@ -3022,7 +3168,7 @@ export default function App() {
     const targetRel = Math.max(0, currentTime - 5);
     latestRelTimeRef.current = targetRel;
     const safeDur =
-      openerPhase === null && isChapterAudioMode && activeVerseTiming
+      isChapterStreamLoaded && activeVerseTiming
         ? Math.max(
             0.5,
             (activeVerseTiming.timestampToMs - activeVerseTiming.timestampFromMs) /
@@ -3035,7 +3181,7 @@ export default function App() {
     setCurrentTime(targetRel);
     if (audioRef.current && audioMode === 'stream') {
       audioRef.current.volume = 1;
-      if (openerPhase === null && isChapterAudioMode && activeVerseTiming) {
+      if (isChapterStreamLoaded && activeVerseTiming) {
         audioRef.current.currentTime =
           activeVerseTiming.timestampFromMs / 1000 + targetRel;
       } else {
@@ -3097,7 +3243,7 @@ export default function App() {
       setCurrentTime(0);
       if (audioRef.current && audioMode === 'stream') {
         audioRef.current.currentTime =
-          isChapterAudioMode && activeVerseTiming
+          isChapterStreamLoaded && activeVerseTiming
             ? activeVerseTiming.timestampFromMs / 1000
             : 0;
       }
@@ -3186,6 +3332,85 @@ export default function App() {
     setSettings((s) => ({ ...s, repeatMode: next }));
   };
 
+  const handleToggleReadingMode = () => {
+    const nextEnabled = settings.readingMode === false;
+    setSettings((s) => ({ ...s, readingMode: nextEnabled }));
+    if (nextEnabled && !isPlaying && activeScreen === 'reader') {
+      handleTogglePlay();
+    }
+  };
+
+  // Preload all local Qari audio assets and Kalima MP3s into CacheStorage cleanly (zero API calls)
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => {
+      void prefetchAllLocalQariAudio(ctrl.signal);
+
+      const kalimaAndCoreUrls = DUAS_AND_KALIMAS.filter(
+        (d) => d.category === 'kalimas' && d.audioUrl
+      ).map((d) => d.audioUrl as string);
+
+      void Promise.all(
+        kalimaAndCoreUrls.map((url) => ensureAudioCached(url, ctrl.signal))
+      );
+    }, 1200);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, []);
+
+  // Keep MediaSession metadata & WakeLock active so Qur'an Reading Mode works smoothly in background
+  useEffect(() => {
+    updateBackgroundMediaSession({
+      title: `${activeSurah.nameSimple} · ${
+        openerPhase === 'istiadhah'
+          ? 'Isti‘adhah'
+          : openerPhase === 'basmalah'
+          ? 'Bismillah'
+          : `Ayah ${activeAyah.number}`
+      }`,
+      artist: activeReciter.name,
+      album: 'Noor Recite · Qur’an',
+      isPlaying,
+      onPlay: () => {
+        if (!isPlaying) handleTogglePlay();
+      },
+      onPause: () => {
+        if (isPlaying) handleTogglePlay();
+      },
+      onNext: handleNextAyah,
+      onPrev: handlePrevAyah,
+    });
+  }, [
+    activeSurah.nameSimple,
+    activeAyah.number,
+    openerPhase,
+    activeReciter.name,
+    isPlaying,
+  ]);
+
+  useEffect(() => {
+    if (!isPlaying || settings.readingMode === false) return;
+    let sentinel: { release?: () => Promise<void> } | null = null;
+    const navWithWake = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release?: () => Promise<void> }> };
+    };
+    if (navWithWake.wakeLock) {
+      void navWithWake.wakeLock
+        .request('screen')
+        .then((s) => {
+          sentinel = s;
+        })
+        .catch(() => {
+          // Wake lock optional in background tabs
+        });
+    }
+    return () => {
+      void sentinel?.release?.().catch(() => {});
+    };
+  }, [isPlaying, settings.readingMode]);
+
   const inspectedBookmark = bookmarks.find(
     (b) => b.verseKey === inspectedAyah.verseKey
   );
@@ -3195,7 +3420,14 @@ export default function App() {
       {/* Hidden Real Audio Element */}
       <audio
         ref={audioRef}
+        crossOrigin="anonymous"
         preload="auto"
+        onPlay={(e) => {
+          applyVoiceTimbreProfile(
+            e.currentTarget,
+            settings.qariVoiceProfile ?? 'recorded'
+          );
+        }}
         onLoadedMetadata={(e) => {
           e.currentTarget.playbackRate = settings.playbackSpeed;
           if (pendingSeekSecRef.current !== null) {
@@ -3224,15 +3456,17 @@ export default function App() {
           }
         }}
         onTimeUpdate={(e) => {
-          if (isPlaying || audioMode !== 'stream' || pendingSeekSecRef.current !== null) {
+          if (audioMode !== 'stream' || pendingSeekSecRef.current !== null) {
             return;
           }
-          if (
-            openerPhase === null &&
-            isChapterAudioMode &&
-            activeVerseTiming &&
-            loadedSourceTagRef.current === `chapter:${activeReciter.id}:${activeSurah.id}`
-          ) {
+          if (isPlaying) {
+            // In background tabs, rAF is paused by browsers; keep verse transitions & word tracking alive via timeupdate
+            if (document.hidden) {
+              syncStreamFrameRef.current(performance.now(), e.currentTarget, true);
+            }
+            return;
+          }
+          if (isChapterStreamLoaded && activeVerseTiming) {
             const verseDurSec = Math.max(
               0.5,
               (activeVerseTiming.timestampToMs - activeVerseTiming.timestampFromMs) /
@@ -3264,6 +3498,7 @@ export default function App() {
       />
       <audio
         ref={preloadAudioRef}
+        crossOrigin="anonymous"
         preload="auto"
         muted
         className="hidden"
@@ -3322,6 +3557,7 @@ export default function App() {
                   openerPhase={openerPhase}
                   openerWordIndex={openerWordIndex}
                   onTogglePlaySurah={handleReciteSurah}
+                  onToggleReadingMode={handleToggleReadingMode}
                   onPlayOpener={handlePlayOpener}
                   onSelectLanguage={(lang) => {
                     failedLangOverlayRef.current.clear();
@@ -3332,6 +3568,12 @@ export default function App() {
                     setActiveScreen('tajweed');
                     mainScrollRef.current?.scrollTo({ top: 0 });
                   }}
+                  onExportPdf={() =>
+                    setPdfExportState({
+                      isOpen: true,
+                      scope: 'surah',
+                    })
+                  }
                 />
 
                 {settings.riwayah === 'warsh' && (
@@ -3376,10 +3618,10 @@ export default function App() {
                         selectedWordId={selectedWordId}
                         isBookmarked={isBookmarked}
                         settings={settings}
-                        onPlayAyah={handlePlayAyah}
-                        onSelectWord={handleSelectWord}
-                        onInspectAyah={handleInspectAyah}
-                        onToggleBookmark={handleToggleBookmark}
+                        onPlayAyah={stablePlayAyah}
+                        onSelectWord={stableSelectWord}
+                        onInspectAyah={stableInspectAyah}
+                        onToggleBookmark={stableToggleBookmark}
                       />
                     );
                   })}
@@ -3465,6 +3707,7 @@ export default function App() {
           <TopicsExplorerView
             reciter={activeReciter}
             translationLanguage={activeTranslationLang}
+            autoplayQueue={settings.autoplayQueue !== false}
             onPracticeInReader={(surahId, ayahNum, autoPlay) => {
               const entry = SURAH_DIRECTORY.find((d) => d.id === surahId);
               if (entry) {
@@ -3539,6 +3782,14 @@ export default function App() {
               failedLangOverlayRef.current.clear();
               setSettings((s) => ({ ...s, translationLanguage: lang }));
             }}
+            onSelectVoiceProfile={(qariVoiceProfile) =>
+              handleApplySettingsPatch({ qariVoiceProfile })
+            }
+            onToggleAutoplayQueue={() => {
+              handleApplySettingsPatch({
+                autoplayQueue: settings.autoplayQueue === false,
+              });
+            }}
             onPauseReaderAudio={() => {
               clearTransitionTimer();
               if (audioRef.current) audioRef.current.pause();
@@ -3564,6 +3815,14 @@ export default function App() {
               failedLangOverlayRef.current.clear();
               setSettings((s) => ({ ...s, translationLanguage: lang }));
             }}
+            onSelectVoiceProfile={(qariVoiceProfile) =>
+              handleApplySettingsPatch({ qariVoiceProfile })
+            }
+            onToggleAutoplayQueue={() => {
+              handleApplySettingsPatch({
+                autoplayQueue: settings.autoplayQueue === false,
+              });
+            }}
             onPauseReaderAudio={() => {
               clearTransitionTimer();
               if (audioRef.current) audioRef.current.pause();
@@ -3587,6 +3846,14 @@ export default function App() {
             onSelectLanguage={(lang) => {
               failedLangOverlayRef.current.clear();
               setSettings((s) => ({ ...s, translationLanguage: lang }));
+            }}
+            onSelectVoiceProfile={(qariVoiceProfile) =>
+              handleApplySettingsPatch({ qariVoiceProfile })
+            }
+            onToggleAutoplayQueue={() => {
+              handleApplySettingsPatch({
+                autoplayQueue: settings.autoplayQueue === false,
+              });
             }}
             onPauseReaderAudio={() => {
               clearTransitionTimer();
@@ -3672,6 +3939,10 @@ export default function App() {
               setActiveScreen('topics');
               mainScrollRef.current?.scrollTo({ top: 0 });
             }}
+            onNavigateHub={(screen) => {
+              setActiveScreen(screen);
+              mainScrollRef.current?.scrollTo({ top: 0 });
+            }}
             lastReadInfo={{
               surahId: activeSurah.id,
               surahName: activeSurah.nameSimple,
@@ -3688,6 +3959,14 @@ export default function App() {
             }}
             onRemoveBookmark={(key) =>
               setBookmarks((prev) => prev.filter((b) => b.verseKey !== key))
+            }
+            onExportBookmarksPdf={(preselectedKeys, collectionFilter) =>
+              setPdfExportState({
+                isOpen: true,
+                scope: 'bookmarks',
+                preselectedBookmarkKeys: preselectedKeys,
+                collectionFilter: collectionFilter ?? 'all',
+              })
             }
             riwayah={settings.riwayah ?? 'hafs'}
             maghrebiOrthography={Boolean(settings.maghrebiOrthography)}
@@ -3716,7 +3995,7 @@ export default function App() {
         </footer>
       </main>
 
-      {/* Full-Width Docked Bottom Player Bar — resides cleanly outside <main> so verse text is never blocked */}
+      {/* Full-Width Docked Bottom Player Bar: resides cleanly outside <main> so verse text is never blocked */}
       {(activeScreen === 'reader' || isPlaying) && (
         <FloatingPlayerDeck
           variant="bottom-bar"
@@ -3740,13 +4019,17 @@ export default function App() {
           onSeekRatio={handleSeekRatio}
           onCycleSpeed={handleCycleSpeed}
           onCycleRepeat={handleCycleRepeat}
+          onToggleReadingMode={handleToggleReadingMode}
           onSelectReciter={(reciterId) => {
             handleApplySettingsPatch({ reciterId });
+          }}
+          onSelectVoiceProfile={(qariVoiceProfile) => {
+            handleApplySettingsPatch({ qariVoiceProfile });
           }}
         />
       )}
 
-      {/* Mobile Bottom Tab Bar — stacked outside <main> cleanly below Player Bar */}
+      {/* Mobile Bottom Tab Bar: stacked outside <main> cleanly below Player Bar */}
       <MobileBottomNav
         activeScreen={activeScreen}
         onSelectScreen={(screen) => {
@@ -3777,6 +4060,44 @@ export default function App() {
           setActiveScreen('drive');
           mainScrollRef.current?.scrollTo({ top: 0 });
         }}
+      />
+
+      <PdfExportModal
+        isOpen={pdfExportState.isOpen}
+        initialScope={pdfExportState.scope}
+        surah={activeSurah}
+        bookmarks={bookmarks}
+        collections={bookmarkCollections}
+        settings={settings}
+        knownSurahsById={surahCache}
+        preselectedBookmarkKeys={pdfExportState.preselectedBookmarkKeys}
+        initialCollectionFilter={pdfExportState.collectionFilter ?? 'all'}
+        onEnsureSurahLanguage={async (lang) => {
+          if (lang === 'en' || lang === 'hi' || lang === 'ur') return;
+          const surahId = activeSurah.id;
+          const hasAll = activeSurah.ayahs.every((a) => Boolean(a.translations?.[lang]));
+          if (hasAll) return;
+          try {
+            const overlay = await fetchSurahLanguageOverlay(surahId, lang, activeSurah.ayahs);
+            if (!isMountedRef.current) return;
+            setSurahCache((prev) => {
+              const current = prev[surahId];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [surahId]: mergeSurahLanguageOverlay(current, lang, overlay),
+              };
+            });
+          } catch {
+            // Keep existing cached translation if overlay fetch fails
+          }
+        }}
+        onClose={() =>
+          setPdfExportState((prev) => ({
+            ...prev,
+            isOpen: false,
+          }))
+        }
       />
 
       <DailyGoalReminderToast

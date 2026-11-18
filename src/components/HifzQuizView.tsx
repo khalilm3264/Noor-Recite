@@ -891,7 +891,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
             overallScore = Math.min(22, Math.round((makhrajScore + maddScore + ghunnahScore + breathScore) / 4));
             const heardNote =
               verification.transcript && !/^\[?(silence|noise)/i.test(verification.transcript)
-                ? `Heard "${verification.transcript.slice(0, 55)}" — `
+                ? `Heard "${verification.transcript.slice(0, 55)}". `
                 : '';
             message = `${heardNote}Spoken audio did not match Ayah ${activeQuestion.ayah.verseKey} (${verification.matchedWordCount}/${verification.expectedWordCount} Arabic words matched). Recite the exact Arabic verse clearly.`;
           } else if (verification.wordMatchRatio < 0.65) {
@@ -1677,7 +1677,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                   </strong>{' '}
                   ({activeQuestion.targetWord.transliteration.slice(0, 3)}…).{' '}
                   {ruleSpec
-                    ? `Rule: ${ruleSpec.name} (${ruleSpec.harakatCount}) — ${ruleSpec.makhraj}.`
+                    ? `Rule is ${ruleSpec.name} (${ruleSpec.harakatCount}), articulated at ${ruleSpec.makhraj}.`
                     : activeQuestion.targetWord.tajweedNote ||
                       'Meaning cue: "' + getWordMeaningText(activeQuestion.targetWord, lang) + '".'}
                 </p>
@@ -2127,7 +2127,7 @@ export const HifzQuizView: React.FC<HifzQuizViewProps> = ({
                   </p>
                   <p className="text-xs text-[#404944] dark:text-emerald-200/80">
                     {chosenOption?.isCorrect || voiceCheckResult?.passed || drillMode === 'blind-recall'
-                      ? `Masha'Allah — Ayah ${activeQuestion.ayah.verseKey} anchored!`
+                      ? `Masha'Allah, Ayah ${activeQuestion.ayah.verseKey} is anchored.`
                       : `Compare ${activeQuestion.ayah.verseKey} with selection (${chosenOption?.sourceVerseKey ?? ''})`}
                   </p>
                 </div>

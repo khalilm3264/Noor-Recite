@@ -4,6 +4,7 @@ import {
   BookOpen,
   Check,
   Edit3,
+  FileDown,
   FolderPlus,
   Layers,
   Play,
@@ -11,7 +12,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { BookmarkCollection, BookmarkItem, RiwayahId, TranslationLanguage } from '../types/quran';
+import { AppScreen, BookmarkCollection, BookmarkItem, RiwayahId, TranslationLanguage } from '../types/quran';
 import { TAJWEED_RULES } from '../data/tajweedRules';
 import { formatAyahByRiwayah } from '../data/qiraatData';
 import { RubElHizbBadge } from './RubElHizbIcon';
@@ -25,10 +26,12 @@ interface BookmarksViewProps {
   onCreateCollection?: (name: string, description: string) => void;
   onUpdateBookmark?: (verseKey: string, patch: Partial<BookmarkItem>) => void;
   onJumpToTopic?: () => void;
+  onNavigateHub?: (screen: AppScreen) => void;
   lastReadInfo?: { surahId: number; surahName: string; ayahNumber: number };
   onChangeDailyGoal: (goal: number) => void;
   onJumpToVerse: (surahId: number, ayahNumber: number, autoPlay?: boolean) => void;
   onRemoveBookmark: (verseKey: string) => void;
+  onExportBookmarksPdf?: (preselectedKeys?: string[], collectionFilter?: string) => void;
   riwayah?: RiwayahId;
   maghrebiOrthography?: boolean;
 }
@@ -50,10 +53,12 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   onCreateCollection,
   onUpdateBookmark,
   onJumpToTopic,
+  onNavigateHub,
   lastReadInfo,
   onChangeDailyGoal,
   onJumpToVerse,
   onRemoveBookmark,
+  onExportBookmarksPdf,
   riwayah = 'hafs',
   maghrebiOrthography = false,
 }) => {
@@ -65,6 +70,7 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const [showNewCollectionForm, setShowNewCollectionForm] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [newColDesc, setNewColDesc] = useState('');
+  const [selectedExportKeys, setSelectedExportKeys] = useState<Set<string>>(() => new Set());
 
   const ratio = Math.min(1, versesRecitedCount / Math.max(1, dailyGoal));
   const circumference = 2 * Math.PI * 26;
@@ -103,6 +109,34 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 space-y-6">
+      {/* Compact Secondary Tools Hub Strip */}
+      {onNavigateHub && (
+        <div
+          role="navigation"
+          aria-label="Study and Archive Tools"
+          className="inline-flex flex-wrap items-center gap-1 p-1 rounded-2xl bg-[#064E3B]/[0.06] dark:bg-[#0A2921] border border-[#064E3B]/10 dark:border-emerald-300/15"
+        >
+          {(
+            [
+              { screen: 'surahs', label: '114 Surahs' },
+              { screen: 'khatmah', label: 'Khatmah Planner' },
+              { screen: 'topics', label: 'Topics' },
+              { screen: 'hifz', label: 'Hifz Quiz' },
+              { screen: 'drive', label: 'Drive Backup' },
+            ] as { screen: AppScreen; label: string }[]
+          ).map((item) => (
+            <button
+              key={item.screen}
+              type="button"
+              onClick={() => onNavigateHub(item.screen)}
+              className="min-h-[34px] px-3 rounded-xl text-xs font-semibold text-[#0F766E] hover:bg-white hover:text-[#064E3B] dark:text-emerald-200/90 dark:hover:bg-emerald-400/15 dark:hover:text-white transition-colors"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Header + Session Cadence Ring */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1.5">
@@ -410,6 +444,61 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
             </div>
           )}
 
+          {onExportBookmarksPdf && filteredBookmarks.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#404944] dark:text-emerald-200/80">
+                <span className="font-semibold text-[#022C22] dark:text-[#E6FFF4] tabular-nums">
+                  {selectedExportKeys.size > 0
+                    ? `${selectedExportKeys.size} of ${filteredBookmarks.length} selected for PDF`
+                    : `${filteredBookmarks.length} ${filteredBookmarks.length === 1 ? 'verse' : 'verses'} ready`}
+                </span>
+                <span aria-hidden="true">·</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedExportKeys(new Set(filteredBookmarks.map((b) => b.verseKey)))
+                  }
+                  className="font-semibold text-[#0F766E] dark:text-emerald-300 hover:underline"
+                >
+                  Select All
+                </button>
+                {selectedExportKeys.size > 0 && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExportKeys(new Set())}
+                      className="font-semibold text-[#404944] dark:text-emerald-200/75 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const chosen =
+                    selectedExportKeys.size > 0
+                      ? filteredBookmarks
+                          .filter((b) => selectedExportKeys.has(b.verseKey))
+                          .map((b) => b.verseKey)
+                      : filteredBookmarks.map((b) => b.verseKey);
+                  onExportBookmarksPdf(chosen, selectedCollectionFilter);
+                }}
+                className="min-h-[38px] px-4 rounded-xl bg-[#064E3B] hover:bg-[#003527] dark:bg-emerald-500 dark:hover:bg-emerald-400 text-[#FEF3C7] dark:text-[#022C22] text-xs font-bold inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
+              >
+                <FileDown className="w-4 h-4" />
+                <span>
+                  {selectedExportKeys.size > 0
+                    ? `Export Selected (${selectedExportKeys.size}) PDF`
+                    : 'Export Bookmarks PDF'}
+                </span>
+              </button>
+            </div>
+          )}
+
           {filteredBookmarks.length === 0 ? (
             <div className="rounded-2xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] p-12 text-center space-y-3 ayah-card-resting">
               <RubElHizbBadge className="w-12 h-12 mx-auto" active />
@@ -424,16 +513,29 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
             <div className="space-y-4">
               {filteredBookmarks.map((bm) => {
                 const isEditing = editingNoteKey === bm.verseKey;
+                const isSelectedForExport = selectedExportKeys.has(bm.verseKey);
                 const inferredLang: TranslationLanguage =
                   bm.translationLanguage ??
-                  (/[\u0600-\u06FF]/.test(bm.translation) && !/[A-Za-z]/.test(bm.translation)
+                  (/[پچژگ]/.test(bm.translation)
+                    ? 'fa'
+                    : /[\u0600-\u06FF]/.test(bm.translation) && !/[A-Za-z]/.test(bm.translation)
                     ? 'ur'
                     : /[\u0900-\u097F]/.test(bm.translation)
                     ? 'hi'
                     : /[\u0980-\u09FF]/.test(bm.translation)
                     ? 'bn'
+                    : /[\u4E00-\u9FFF]/.test(bm.translation)
+                    ? 'zh'
+                    : /[\u0400-\u04FF]/.test(bm.translation)
+                    ? 'ru'
+                    : /[ğışçöüĞİŞÇÖÜ]/.test(bm.translation)
+                    ? 'tr'
                     : /[ɓɗƙƴŋƁƊƘƳŊ]/.test(bm.translation)
                     ? 'ha'
+                    : /[ñ¿¡Ñ]/.test(bm.translation)
+                    ? 'es'
+                    : /[àâæçèêëîïôœùûÿÀÂÆÇÈÊËÎÏÔŒÙÛŸ]/.test(bm.translation)
+                    ? 'fr'
                     : 'en');
 
                 return (
@@ -443,6 +545,25 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#064E3B]/8 dark:border-emerald-300/10">
                       <div className="flex items-center gap-3">
+                        {onExportBookmarksPdf && (
+                          <input
+                            type="checkbox"
+                            checked={isSelectedForExport}
+                            onChange={() =>
+                              setSelectedExportKeys((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(bm.verseKey)) {
+                                  next.delete(bm.verseKey);
+                                } else {
+                                  next.add(bm.verseKey);
+                                }
+                                return next;
+                              })
+                            }
+                            aria-label={`Select ${bm.surahName} ${bm.verseKey} for PDF export`}
+                            className="h-4 w-4 rounded border-[#064E3B]/30 accent-[#064E3B] cursor-pointer"
+                          />
+                        )}
                         <RubElHizbBadge className="w-8 h-8" label={bm.ayahNumber} active />
                         <div>
                           <h2 className="text-sm font-bold text-[#022C22] dark:text-[#E6FFF4]">

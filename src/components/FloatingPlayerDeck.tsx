@@ -14,10 +14,12 @@ import {
   SkipForward,
   Volume2,
   Sparkles,
+  ScrollText,
 } from 'lucide-react';
-import { Ayah, OpenerPhase, ReaderSettings, Reciter, Surah } from '../types/quran';
+import { Ayah, OpenerPhase, QariVoiceProfile, ReaderSettings, Reciter, Surah } from '../types/quran';
 import { BASMALAH_OPENER, ISTIADHAH_OPENER } from '../data/quranData';
 import { getWordDisplayArabic } from '../data/qiraatData';
+import { QARI_VOICE_PROFILES } from '../utils/useSmoothReadingPlayback';
 
 interface FloatingPlayerDeckProps {
   surah: Surah;
@@ -42,7 +44,9 @@ interface FloatingPlayerDeckProps {
   onSeekRatio: (ratio: number) => void;
   onCycleSpeed: () => void;
   onCycleRepeat: () => void;
+  onToggleReadingMode?: () => void;
   onSelectReciter: (reciterId: string) => void;
+  onSelectVoiceProfile?: (profile: QariVoiceProfile) => void;
 }
 
 function formatTime(sec: number): string {
@@ -75,7 +79,9 @@ export const FloatingPlayerDeck: React.FC<FloatingPlayerDeckProps> = ({
   onSeekRatio,
   onCycleSpeed,
   onCycleRepeat,
+  onToggleReadingMode,
   onSelectReciter,
+  onSelectVoiceProfile,
 }) => {
   const waveRef = useRef<HTMLDivElement | null>(null);
   const mobileWaveRef = useRef<HTMLDivElement | null>(null);
@@ -245,6 +251,36 @@ export const FloatingPlayerDeck: React.FC<FloatingPlayerDeckProps> = ({
             );
           })}
       </div>
+      {onSelectVoiceProfile && (
+        <div className="mt-2 pt-2 border-t border-[#064E3B]/10 dark:border-emerald-300/15">
+          <p className="px-2.5 pb-1 text-[10.5px] font-bold uppercase tracking-wider text-[#0F766E] dark:text-emerald-300/80">
+            Voice Tone
+          </p>
+          <div className="grid grid-cols-1 gap-0.5 max-h-36 overflow-y-auto">
+            {QARI_VOICE_PROFILES.map((vp) => {
+              const active = (settings.qariVoiceProfile ?? 'recorded') === vp.id;
+              return (
+                <button
+                  key={vp.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectVoiceProfile(vp.id);
+                    setIsReciterMenuOpen(false);
+                  }}
+                  className={`w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 text-left text-[11px] font-semibold transition-colors ${
+                    active
+                      ? 'bg-[#D97706] text-white dark:bg-amber-400 dark:text-[#022C22]'
+                      : 'text-[#022C22] hover:bg-[#064E3B]/6 dark:text-[#E6FFF4] dark:hover:bg-emerald-400/10'
+                  }`}
+                >
+                  <span className="truncate">{vp.label}</span>
+                  {active && <Check className="w-3 h-3 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -835,6 +871,23 @@ export const FloatingPlayerDeck: React.FC<FloatingPlayerDeckProps> = ({
                 )}
                 <span className="hidden md:inline">{repeatLabel}</span>
               </button>
+
+              {onToggleReadingMode && (
+                <button
+                  type="button"
+                  onClick={onToggleReadingMode}
+                  aria-pressed={settings.readingMode !== false}
+                  title="Reading Mode: Auto-scrolls and advances across Surahs"
+                  className={`min-h-[34px] px-2 md:px-2.5 rounded-full flex items-center gap-1 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                    settings.readingMode !== false
+                      ? 'bg-[#064E3B]/12 text-[#064E3B] dark:bg-emerald-400/20 dark:text-emerald-200 ring-1 ring-[#064E3B]/25 dark:ring-emerald-300/30'
+                      : 'text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200/75 dark:hover:bg-emerald-400/10'
+                  }`}
+                >
+                  <ScrollText className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden xl:inline">Reading</span>
+                </button>
+              )}
 
               <span className="hidden lg:inline-block text-[11px] font-medium text-[#404944] dark:text-emerald-200/75 tabular-nums pl-1 min-w-[38px] text-right">
                 {openerPhase ? 'Opener' : `${activeAyah.number}/${surah.ayahs.length}`}

@@ -80,23 +80,85 @@ export const TRANSLATION_LANGUAGE_OPTIONS: TranslationLanguageOption[] = [
     fontClass: 'font-translation-latin',
     pillClass: 'font-translation-latin leading-normal',
   },
+  {
+    id: 'fa',
+    label: 'فارسی',
+    shortLabel: 'فارسی',
+    sub: 'اسلام‌هاوس · مکارم',
+    dir: 'rtl',
+    fontClass: 'font-translation-fa',
+    pillClass: 'font-translation-fa text-[13px] leading-[1.8]',
+  },
+  {
+    id: 'tr',
+    label: 'Türkçe',
+    shortLabel: 'Türkçe',
+    sub: 'Diyanet İşleri',
+    dir: 'ltr',
+    fontClass: 'font-translation-latin',
+    pillClass: 'font-translation-latin leading-normal',
+  },
+  {
+    id: 'ru',
+    label: 'Русский',
+    shortLabel: 'Русский',
+    sub: 'Эльмир Кулиев',
+    dir: 'ltr',
+    fontClass: 'font-translation-latin',
+    pillClass: 'font-translation-latin leading-normal',
+  },
+  {
+    id: 'zh',
+    label: '中文',
+    shortLabel: '中文',
+    sub: '马坚译本 (简体)',
+    dir: 'ltr',
+    fontClass: 'font-translation-zh',
+    pillClass: 'font-translation-zh leading-normal',
+  },
+  {
+    id: 'es',
+    label: 'Español',
+    shortLabel: 'Español',
+    sub: 'Isa García',
+    dir: 'ltr',
+    fontClass: 'font-translation-latin',
+    pillClass: 'font-translation-latin leading-normal',
+  },
+  {
+    id: 'fr',
+    label: 'Français',
+    shortLabel: 'Français',
+    sub: 'Hamidullah',
+    dir: 'ltr',
+    fontClass: 'font-translation-latin',
+    pillClass: 'font-translation-latin leading-normal',
+  },
 ];
 
 export function isRtlTranslationLang(lang: TranslationLanguage): boolean {
-  return lang === 'ur';
+  return lang === 'ur' || lang === 'fa';
 }
 
 export function getTranslationFontClass(lang: TranslationLanguage): string {
   switch (lang) {
     case 'ur':
       return 'font-translation-ur';
+    case 'fa':
+      return 'font-translation-fa';
     case 'hi':
       return 'font-translation-hi';
     case 'bn':
       return 'font-translation-bn';
+    case 'zh':
+      return 'font-translation-zh';
     case 'ms':
     case 'ha':
     case 'ff':
+    case 'tr':
+    case 'ru':
+    case 'es':
+    case 'fr':
       return 'font-translation-latin';
     default:
       return '';
@@ -112,6 +174,13 @@ export function getTranslationTextClass(
       ? 'font-translation-ur text-[15.5px] leading-[2.2]'
       : 'font-translation-ur text-[17px] sm:text-[18px] leading-[2.35]';
   }
+  if (lang === 'fa') {
+    return variant === 'compact'
+      ? 'font-translation-fa text-xs sm:text-[13.5px] leading-[1.9]'
+      : variant === 'ayah'
+      ? 'font-translation-fa text-[15.5px] sm:text-[16.5px] leading-[2.05]'
+      : 'font-translation-fa text-[15px] sm:text-[16px] leading-[1.95]';
+  }
   if (lang === 'hi') {
     return variant === 'compact'
       ? 'font-translation-hi text-xs sm:text-[13px] leading-[1.8]'
@@ -126,7 +195,22 @@ export function getTranslationTextClass(
       ? 'font-translation-bn text-[15.5px] sm:text-[16px] leading-[1.85]'
       : 'font-translation-bn text-[15px] sm:text-[15.5px] leading-[1.85]';
   }
-  if (lang === 'ms' || lang === 'ha' || lang === 'ff') {
+  if (lang === 'zh') {
+    return variant === 'compact'
+      ? 'font-translation-zh text-xs sm:text-[13px] leading-[1.8]'
+      : variant === 'ayah'
+      ? 'font-translation-zh text-[15.5px] sm:text-[16px] leading-[1.9]'
+      : 'font-translation-zh text-[15px] leading-[1.8]';
+  }
+  if (
+    lang === 'ms' ||
+    lang === 'ha' ||
+    lang === 'ff' ||
+    lang === 'tr' ||
+    lang === 'ru' ||
+    lang === 'es' ||
+    lang === 'fr'
+  ) {
     return variant === 'compact'
       ? 'font-translation-latin text-xs sm:text-[13px] leading-relaxed'
       : variant === 'ayah'
@@ -192,4 +276,31 @@ export function getAyahTranslationSegments(
   if (lang === 'hi') return ayah.translationSegmentsHi;
   if (lang === 'ur') return ayah.translationSegmentsUr;
   return undefined;
+}
+
+export function resolveEffectiveSyncedWordIndex(
+  syncedIndex: number | null,
+  segments: TranslationSegment[]
+): number | null {
+  if (syncedIndex === null || segments.length === 0) return null;
+  if (segments.some((seg) => seg.wordIndex === syncedIndex)) {
+    return syncedIndex;
+  }
+  let bestBefore: number | null = null;
+  let closest: number | null = null;
+  let minDist = Infinity;
+  for (const seg of segments) {
+    if (
+      seg.wordIndex <= syncedIndex &&
+      (bestBefore === null || seg.wordIndex > bestBefore)
+    ) {
+      bestBefore = seg.wordIndex;
+    }
+    const dist = Math.abs(seg.wordIndex - syncedIndex);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = seg.wordIndex;
+    }
+  }
+  return bestBefore ?? closest;
 }

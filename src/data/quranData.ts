@@ -11,7 +11,7 @@ import {
   WordSegment,
   WordToken,
 } from '../types/quran';
-import { getWordMeaningText } from '../utils/translationConfig';
+import { getWordMeaningText, hasLocalizedWordMeaning } from '../utils/translationConfig';
 import { translateTextsBatch } from '../utils/localizedText';
 
 export const RECITERS: Reciter[] = [
@@ -127,6 +127,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
     ms: 'Aku berlindung dengan Allah daripada syaitan yang direjam.',
     ha: 'Ina neman tsari da Allah daga Shaiɗan jefaffe.',
     ff: 'Miɗo mooloo e Alla e Seyɗaane mo riiwaa oo.',
+    fa: 'پناه می‌برم به خداوند از شیطان رانده‌شده.',
+    tr: 'Kovulmuş şeytandan Allah’a sığınırım.',
+    ru: 'Прибегаю к защите Аллаха от побиваемого камнями шайтана.',
+    zh: '我求真主保佑，免遭受诅咒的恶魔的侵害。',
+    es: 'Me refugio en Allah de Satanás, el maldito.',
+    fr: 'Je cherche refuge auprès d’Allah contre Satan le maudit.',
   },
   translationSegments: [
     { text: 'I seek refuge', wordIndex: 0 },
@@ -149,6 +155,17 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
     { text: 'مردود', wordIndex: 4 },
     { text: 'سے۔', wordIndex: 2 },
   ],
+  translationSegmentsByLang: {
+    zh: [
+      { text: '我求', wordIndex: 0 },
+      { text: '真主', wordIndex: 1 },
+      { text: '保佑，', wordIndex: 0 },
+      { text: '免遭', wordIndex: 2 },
+      { text: '受诅咒的', wordIndex: 4 },
+      { text: '恶魔', wordIndex: 3 },
+      { text: '的侵害。', wordIndex: 2 },
+    ],
+  },
   words: [
     {
       id: 'opener-ist-1',
@@ -162,6 +179,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
         ms: 'Aku berlindung',
         ha: 'Ina neman tsari',
         ff: 'Miɗo mooloo',
+        fa: 'پناه می‌برم',
+        tr: 'Sığınırım',
+        ru: 'Прибегаю',
+        zh: '我求保佑',
+        es: 'Me refugio',
+        fr: 'Je cherche refuge',
       },
     },
     {
@@ -176,6 +199,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
         ms: 'dengan Allah',
         ha: 'da Allah',
         ff: 'e Alla',
+        fa: 'به خداوند',
+        tr: 'Allah’a',
+        ru: 'к Аллаху',
+        zh: '向真主',
+        es: 'en Allah',
+        fr: 'auprès d’Allah',
       },
     },
     {
@@ -190,6 +219,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
         ms: 'daripada',
         ha: 'daga',
         ff: 'e',
+        fa: 'از',
+        tr: '-dan',
+        ru: 'от',
+        zh: '免遭',
+        es: 'de',
+        fr: 'contre',
       },
     },
     {
@@ -204,6 +239,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
         ms: 'syaitan',
         ha: 'Shaiɗan',
         ff: 'Seyɗaane',
+        fa: 'شیطان',
+        tr: 'şeytan',
+        ru: 'шайтана',
+        zh: '恶魔',
+        es: 'Satanás',
+        fr: 'Satan',
       },
     },
     {
@@ -218,6 +259,12 @@ export const ISTIADHAH_OPENER: SurahOpenerLine = {
         ms: 'yang direjam',
         ha: 'jefaffe',
         ff: 'mo riiwaa oo',
+        fa: 'رانده‌شده',
+        tr: 'kovulmuş',
+        ru: 'побиваемого',
+        zh: '受诅咒的',
+        es: 'el maldito',
+        fr: 'le maudit',
       },
     },
   ],
@@ -238,6 +285,12 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
     ms: 'Dengan nama Allah, Yang Maha Pemurah, lagi Maha Mengasihani.',
     ha: 'Da sũnan Allah, Mai rahama, Mai jin ƙai.',
     ff: 'E innde Alla, Jurmorgol, Jom yurmeende.',
+    fa: 'به نام خداوند بخشنده و مهربان.',
+    tr: 'Rahmân ve Rahîm olan Allah’ın adıyla.',
+    ru: 'Во имя Аллаха, Милостивого, Милосердного.',
+    zh: '奉至仁至慈的真主之名。',
+    es: 'En el nombre de Allah, el Misericordioso, el Compasivo.',
+    fr: 'Au nom d’Allah, le Tout Miséricordieux, le Très Miséricordieux.',
   },
   translationSegments: [
     { text: 'In the name of', wordIndex: 0 },
@@ -258,6 +311,15 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
     { text: 'جو بڑا مہربان', wordIndex: 2 },
     { text: 'نہایت رحم والا ہے', wordIndex: 3 },
   ],
+  translationSegmentsByLang: {
+    zh: [
+      { text: '奉', wordIndex: 0 },
+      { text: '至仁', wordIndex: 2 },
+      { text: '至慈的', wordIndex: 3 },
+      { text: '真主', wordIndex: 1 },
+      { text: '之名。', wordIndex: 0 },
+    ],
+  },
   words: [
     {
       id: 'opener-bas-1',
@@ -271,6 +333,12 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
         ms: 'Dengan nama',
         ha: 'Da sũnan',
         ff: 'E innde',
+        fa: 'به نام',
+        tr: 'Adıyla',
+        ru: 'Во имя',
+        zh: '奉…之名',
+        es: 'En el nombre de',
+        fr: 'Au nom d’',
       },
     },
     {
@@ -285,6 +353,12 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
         ms: 'Allah',
         ha: 'Allah',
         ff: 'Alla',
+        fa: 'خداوند',
+        tr: 'Allah’ın',
+        ru: 'Аллаха',
+        zh: '真主',
+        es: 'Allah',
+        fr: 'Allah',
       },
     },
     {
@@ -299,6 +373,12 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
         ms: 'Yang Maha Pemurah',
         ha: 'Mai rahama',
         ff: 'Jurmorgol',
+        fa: 'بخشنده',
+        tr: 'Rahmân',
+        ru: 'Милостивого',
+        zh: '至仁的',
+        es: 'el Misericordioso',
+        fr: 'le Tout Miséricordieux',
       },
     },
     {
@@ -313,6 +393,12 @@ export const BASMALAH_OPENER: SurahOpenerLine = {
         ms: 'Maha Mengasihani',
         ha: 'Mai jin ƙai',
         ff: 'Jom yurmeende',
+        fa: 'مهربان',
+        tr: 'Rahîm',
+        ru: 'Милосердного',
+        zh: '至慈的',
+        es: 'el Compasivo',
+        fr: 'le Très Miséricordieux',
       },
     },
   ],
@@ -1941,6 +2027,12 @@ const TRANSLATION_RESOURCE_IDS: Record<TranslationLanguage, number> = {
   ms: 39, // Abdullah Muhammad Basmeih (Malay / Indo)
   ha: 32, // Abubakar Mahmoud Gumi (Pan-Hausa)
   ff: 20, // Base Sahih Intl translated cleanly into Fulfulde via /api/translate-batch
+  fa: 135, // IslamHouse.com (Persian / Farsi)
+  tr: 77, // Diyanet Isleri (Turkish)
+  ru: 45, // Elmir Kuliev (Russian)
+  zh: 56, // Ma Jian (Simplified Chinese)
+  es: 83, // Sheikh Isa Garcia (Spanish)
+  fr: 31, // Muhammad Hamidullah (French)
 };
 
 const ALQURAN_CLOUD_EDITION_IDS: Partial<Record<TranslationLanguage, string>> = {
@@ -1949,6 +2041,12 @@ const ALQURAN_CLOUD_EDITION_IDS: Partial<Record<TranslationLanguage, string>> = 
   bn: 'bn.bengali',
   ms: 'ms.basmeih',
   ha: 'ha.gumi',
+  fa: 'fa.makarem',
+  tr: 'tr.diyanet',
+  ru: 'ru.kuliev',
+  zh: 'zh.jian',
+  es: 'es.garcia',
+  fr: 'fr.hamidullah',
 };
 
 function decodeHtmlEntities(text: string): string {
@@ -2034,28 +2132,134 @@ const ENGLISH_GLUE_WORDS = new Set([
 function normalizeScriptTokens(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/['’]/g, '')
     .split(/[^\p{L}\p{M}\p{N}]+/u)
     .filter(Boolean);
 }
 
+export function tokenizeTranslationForAlignment(
+  translation: string,
+  lang: TranslationLanguage = 'en'
+): string[] {
+  const trimmed = translation.trim();
+  if (!trimmed) return [];
+
+  const isCjk =
+    lang === 'zh' ||
+    (/[\u4E00-\u9FFF]/.test(trimmed) &&
+      trimmed.split(/\s+/).filter(Boolean).length <= 2);
+  if (!isCjk) {
+    return trimmed.split(/\s+/).filter(Boolean);
+  }
+
+  // Collapse stray whitespace between adjacent CJK characters/punctuation
+  const normalized = trimmed.replace(
+    /([\u4E00-\u9FFF，。！？；：、（）「」『』])\s+([\u4E00-\u9FFF，。！？；：、（）「」『』])/g,
+    '$1$2'
+  );
+
+  let rawParts: string[] = [];
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
+    for (const seg of segmenter.segment(normalized)) {
+      const piece = seg.segment.trim();
+      if (piece) rawParts.push(piece);
+    }
+  } else {
+    rawParts = normalized.match(/[\u4E00-\u9FFF]{1,2}|[A-Za-z0-9]+|[^\s]/g) ?? [];
+  }
+
+  const merged: string[] = [];
+  let pendingPrefix = '';
+  const trailingPunctRe = /^[，。！？；：、,.!?;:)）\]」』"”'’—\-…]+$/;
+  const leadingPunctRe = /^[(\[（「『"“'‘]+$/;
+
+  for (const part of rawParts) {
+    if (leadingPunctRe.test(part)) {
+      pendingPrefix += part;
+      continue;
+    }
+    if (trailingPunctRe.test(part) && merged.length > 0) {
+      merged[merged.length - 1] += part;
+      continue;
+    }
+    merged.push(pendingPrefix + part);
+    pendingPrefix = '';
+  }
+
+  if (pendingPrefix) {
+    if (merged.length > 0) {
+      merged[merged.length - 1] += pendingPrefix;
+    } else {
+      merged.push(pendingPrefix);
+    }
+  }
+
+  return merged;
+}
+
+export function joinTranslationTokens(
+  parts: string[],
+  lang: TranslationLanguage = 'en'
+): string {
+  if (parts.length === 0) return '';
+  if (lang !== 'zh') return parts.join(' ');
+  let out = parts[0];
+  for (let i = 1; i < parts.length; i++) {
+    const prevLast = out[out.length - 1] ?? '';
+    const nextFirst = parts[i][0] ?? '';
+    const needsSpace = /[A-Za-z0-9]/.test(prevLast) && /[A-Za-z0-9]/.test(nextFirst);
+    out += (needsSpace ? ' ' : '') + parts[i];
+  }
+  return out;
+}
+
 /**
- * Aligns a verse's full translation (English, Hindi, or Urdu) back to individual Arabic words
- * using per-word glosses from the API, preserving non-linear word order across SVO & SOV languages.
+ * Aligns a verse's full translation back to individual Arabic words using per-word glosses
+ * when available, or CJK/whitespace-aware proportional segmentation otherwise.
  */
 export function alignTranslationSegments(
   translation: string,
   words: WordToken[],
   lang: TranslationLanguage = 'en'
 ): TranslationSegment[] | undefined {
-  const tokens = translation.trim().split(/\s+/).filter(Boolean);
+  const tokens = tokenizeTranslationForAlignment(translation, lang);
   if (!tokens.length || !words.length) return undefined;
   if (words.length === 1) {
-    return [{ text: translation.trim(), wordIndex: 0 }];
+    return [{ text: joinTranslationTokens(tokens, lang), wordIndex: 0 }];
+  }
+
+  const hasAnyLocalizedGloss = words.some((w) => hasLocalizedWordMeaning(w, lang));
+  if (!hasAnyLocalizedGloss) {
+    const weights = words.map((w) =>
+      Math.max(1, w.arabic.replace(/[\u064B-\u065F\u0670]/g, '').length)
+    );
+    const totalWeight = weights.reduce((sum, val) => sum + val, 0);
+    const segments: TranslationSegment[] = [];
+    let cursor = 0;
+    let cumulativeWeight = 0;
+
+    for (let wIdx = 0; wIdx < words.length; wIdx++) {
+      cumulativeWeight += weights[wIdx];
+      const targetEnd =
+        wIdx === words.length - 1
+          ? tokens.length
+          : Math.min(
+              tokens.length,
+              Math.max(cursor, Math.round((cumulativeWeight / totalWeight) * tokens.length))
+            );
+      if (targetEnd > cursor) {
+        segments.push({
+          text: joinTranslationTokens(tokens.slice(cursor, targetEnd), lang),
+          wordIndex: wIdx,
+        });
+        cursor = targetEnd;
+      }
+    }
+    return segments.length > 0 ? segments : undefined;
   }
 
   const wordLexicons = words.map((w) => {
-    const gloss = getWordMeaningText(w, lang);
+    const gloss = hasLocalizedWordMeaning(w, lang) ? getWordMeaningText(w, lang) : '';
     return new Set(normalizeScriptTokens(gloss || ''));
   });
 
@@ -2065,39 +2269,42 @@ export function alignTranslationSegments(
     const rawTok = tokens[i];
     const cleanList = normalizeScriptTokens(rawTok);
     if (cleanList.length === 0) continue;
-    const cleanTok = cleanList[0];
+    const substantial = cleanList.filter((t) => t.length >= 2);
+    const candidateTokens = substantial.length > 0 ? substantial : cleanList;
     const approxArabicPos = (i / tokens.length) * (words.length - 1);
 
     let bestScore = 0;
     let bestWordIdx: number | null = null;
 
-    for (let wIdx = 0; wIdx < words.length; wIdx++) {
-      const lex = wordLexicons[wIdx];
-      if (!lex.size) continue;
+    for (const cleanTok of candidateTokens) {
+      for (let wIdx = 0; wIdx < words.length; wIdx++) {
+        const lex = wordLexicons[wIdx];
+        if (!lex.size) continue;
 
-      let matchStrength = 0;
-      if (lex.has(cleanTok)) {
-        matchStrength = lang === 'en' && ENGLISH_GLUE_WORDS.has(cleanTok) ? 1.1 : 3.2;
-      } else if (cleanTok.length >= 3) {
-        const prefixLen = Math.min(4, cleanTok.length);
-        for (const glossTok of lex) {
-          if (
-            glossTok.length >= 3 &&
-            (glossTok.startsWith(cleanTok.slice(0, prefixLen)) ||
-              cleanTok.startsWith(glossTok.slice(0, Math.min(4, glossTok.length))))
-          ) {
-            matchStrength = 2.1;
-            break;
+        let matchStrength = 0;
+        if (lex.has(cleanTok)) {
+          matchStrength = lang === 'en' && ENGLISH_GLUE_WORDS.has(cleanTok) ? 1.1 : 3.2;
+        } else if (cleanTok.length >= 3) {
+          const prefixLen = Math.min(4, cleanTok.length);
+          for (const glossTok of lex) {
+            if (
+              glossTok.length >= 3 &&
+              (glossTok.startsWith(cleanTok.slice(0, prefixLen)) ||
+                cleanTok.startsWith(glossTok.slice(0, Math.min(4, glossTok.length))))
+            ) {
+              matchStrength = 2.1;
+              break;
+            }
           }
         }
-      }
 
-      if (matchStrength > 0) {
-        const distPenalty = Math.abs(wIdx - approxArabicPos) * 0.08;
-        const score = matchStrength - distPenalty;
-        if (score > bestScore) {
-          bestScore = score;
-          bestWordIdx = wIdx;
+        if (matchStrength > 0) {
+          const distPenalty = Math.abs(wIdx - approxArabicPos) * 0.08;
+          const score = matchStrength - distPenalty;
+          if (score > bestScore) {
+            bestScore = score;
+            bestWordIdx = wIdx;
+          }
         }
       }
     }
@@ -2107,7 +2314,7 @@ export function alignTranslationSegments(
     }
   }
 
-  // Fill any unmatched tokens (e.g. bracketed notes, postpositions, or helper verbs) smoothly from neighbors
+  // Fill any unmatched tokens smoothly from neighbors
   let lastSeen = 0;
   for (let i = 0; i < tokens.length; i++) {
     if (assigned[i] !== null) {
@@ -2136,7 +2343,7 @@ export function alignTranslationSegments(
     const wIdx = assigned[i] ?? 0;
     const prev = segments[segments.length - 1];
     if (prev && prev.wordIndex === wIdx) {
-      prev.text = `${prev.text} ${tokens[i]}`;
+      prev.text = joinTranslationTokens([prev.text, tokens[i]], lang);
     } else {
       segments.push({ text: tokens[i], wordIndex: wIdx });
     }
@@ -2157,16 +2364,25 @@ export interface SurahLanguageOverlay {
   >;
 }
 
+const inFlightLangOverlays = new Map<string, Promise<SurahLanguageOverlay>>();
+
 export async function fetchSurahLanguageOverlay(
   surahId: number,
   targetLang: Exclude<TranslationLanguage, 'en'>,
   sourceVerses?: Array<{ number: number; arabic: string; translation: string; words: WordToken[] }>
 ): Promise<SurahLanguageOverlay> {
-  const cacheKey = `https://noor-recite.local/surah-lang/v2/${surahId}/${targetLang}`;
-  const cached = await readDataCache<SurahLanguageOverlay>(cacheKey);
-  if (cached && cached.versesByNumber && Object.keys(cached.versesByNumber).length > 0) {
-    return cached;
+  const dedupeKey = `${surahId}:${targetLang}`;
+  const existingPromise = inFlightLangOverlays.get(dedupeKey);
+  if (existingPromise) {
+    return existingPromise;
   }
+
+  const run = (async (): Promise<SurahLanguageOverlay> => {
+    const cacheKey = `https://noor-recite.local/surah-lang/v2/${surahId}/${targetLang}`;
+    const cached = await readDataCache<SurahLanguageOverlay>(cacheKey);
+    if (cached && cached.versesByNumber && Object.keys(cached.versesByNumber).length > 0) {
+      return cached;
+    }
 
   const versesByNumber: SurahLanguageOverlay['versesByNumber'] = {};
 
@@ -2230,7 +2446,15 @@ export async function fetchSurahLanguageOverlay(
 
   const resourceId = TRANSLATION_RESOURCE_IDS[targetLang];
   const wordApiLang =
-    targetLang === 'ms' ? 'id' : targetLang === 'ha' ? 'en' : targetLang;
+    targetLang === 'ms'
+      ? 'id'
+      : targetLang === 'ha' ||
+        targetLang === 'ru' ||
+        targetLang === 'zh' ||
+        targetLang === 'es' ||
+        targetLang === 'fr'
+      ? 'en'
+      : targetLang;
 
   try {
     const firstRes = await fetch(
@@ -2263,7 +2487,11 @@ export async function fetchSurahLanguageOverlay(
           ?? v.translations?.[0]?.text;
         const cleanText = rawText ? stripHtmlTags(rawText) : undefined;
         const wordMeanings =
-          targetLang === 'ha'
+          targetLang === 'ha' ||
+          targetLang === 'ru' ||
+          targetLang === 'zh' ||
+          targetLang === 'es' ||
+          targetLang === 'fr'
             ? undefined
             : (v.words || [])
                 .filter((w) => w.char_type_name === 'word')
@@ -2315,9 +2543,17 @@ export async function fetchSurahLanguageOverlay(
     throw new Error(`Unable to fetch ${targetLang} translations.`);
   }
 
-  const overlay: SurahLanguageOverlay = { versesByNumber };
-  void writeDataCache(cacheKey, overlay);
-  return overlay;
+    const overlay: SurahLanguageOverlay = { versesByNumber };
+    void writeDataCache(cacheKey, overlay);
+    return overlay;
+  })();
+
+  inFlightLangOverlays.set(dedupeKey, run);
+  try {
+    return await run;
+  } finally {
+    inFlightLangOverlays.delete(dedupeKey);
+  }
 }
 
 export interface SurahWarshOverlay {
@@ -2569,4 +2805,116 @@ export async function fetchSurahFromApi(entry: SurahDirectoryEntry): Promise<Sur
     featured: entry.featured,
     ayahs,
   };
+}
+
+// Canonical 30-Juz Boundaries verified from Quran.com / Medina Mushaf
+const RAW_JUZ_SPECS: Array<{
+  juzNumber: number;
+  label: string;
+  arabicLabel: string;
+  versesCount: number;
+  ranges: Array<[number, number, number]>;
+}> = [
+  { juzNumber: 1, label: 'Alif-Lām-Mīm', arabicLabel: 'آلم', versesCount: 148, ranges: [[1, 1, 7], [2, 1, 141]] },
+  { juzNumber: 2, label: 'Sayaqūl', arabicLabel: 'سَيَقُولُ', versesCount: 111, ranges: [[2, 142, 252]] },
+  { juzNumber: 3, label: 'Tilkar-Rusul', arabicLabel: 'تِلْكَ ٱلرُّسُلُ', versesCount: 126, ranges: [[2, 253, 286], [3, 1, 92]] },
+  { juzNumber: 4, label: 'Lan Tanālū', arabicLabel: 'لَنْ تَنَالُوا', versesCount: 131, ranges: [[3, 93, 200], [4, 1, 23]] },
+  { juzNumber: 5, label: 'Wal-Muḥṣanāt', arabicLabel: 'وَٱلْمُحْصَنَـٰتُ', versesCount: 124, ranges: [[4, 24, 147]] },
+  { juzNumber: 6, label: 'Lā Yuḥibbullāh', arabicLabel: 'لَا يُحِبُّ ٱللَّهُ', versesCount: 110, ranges: [[4, 148, 176], [5, 1, 81]] },
+  { juzNumber: 7, label: 'Wa Idhā Sami‘ū', arabicLabel: 'وَإِذَا سَمِعُوا', versesCount: 149, ranges: [[5, 82, 120], [6, 1, 110]] },
+  { juzNumber: 8, label: 'Wa Law Annanā', arabicLabel: 'وَلَوْ أَنَّنَا', versesCount: 142, ranges: [[6, 111, 165], [7, 1, 87]] },
+  { juzNumber: 9, label: 'Qālal-Mala’u', arabicLabel: 'قَالَ ٱلْمَلَأُ', versesCount: 159, ranges: [[7, 88, 206], [8, 1, 40]] },
+  { juzNumber: 10, label: 'Wa‘lamū', arabicLabel: 'وَٱعْلَمُوا', versesCount: 127, ranges: [[8, 41, 75], [9, 1, 92]] },
+  { juzNumber: 11, label: 'Ya‘tadhirūn', arabicLabel: 'يَعْتَذِرُونَ', versesCount: 151, ranges: [[9, 93, 129], [10, 1, 109], [11, 1, 5]] },
+  { juzNumber: 12, label: 'Wa Mā Min Dābbah', arabicLabel: 'وَمَا مِنْ دَابَّةٍ', versesCount: 170, ranges: [[11, 6, 123], [12, 1, 52]] },
+  { juzNumber: 13, label: 'Wa Mā Ubarri’u', arabicLabel: 'وَمَا أُبَرِّئُ', versesCount: 154, ranges: [[12, 53, 111], [13, 1, 43], [14, 1, 52]] },
+  { juzNumber: 14, label: 'Rubamā', arabicLabel: 'رُبَمَا', versesCount: 227, ranges: [[15, 1, 99], [16, 1, 128]] },
+  { juzNumber: 15, label: 'Subḥānalladhī', arabicLabel: 'سُبْحَـٰنَ ٱلَّذِى', versesCount: 185, ranges: [[17, 1, 111], [18, 1, 74]] },
+  { juzNumber: 16, label: 'Qāla Alam', arabicLabel: 'قَالَ أَلَمْ', versesCount: 269, ranges: [[18, 75, 110], [19, 1, 98], [20, 1, 135]] },
+  { juzNumber: 17, label: 'Iqtaraba Lin-Nās', arabicLabel: 'ٱقْتَرَبَ لِلنَّاسِ', versesCount: 190, ranges: [[21, 1, 112], [22, 1, 78]] },
+  { juzNumber: 18, label: 'Qad Aflaḥa', arabicLabel: 'قَدْ أَفْلَحَ', versesCount: 202, ranges: [[23, 1, 118], [24, 1, 64], [25, 1, 20]] },
+  { juzNumber: 19, label: 'Wa Qālalladhīna', arabicLabel: 'وَقَالَ ٱلَّذِينَ', versesCount: 339, ranges: [[25, 21, 77], [26, 1, 227], [27, 1, 55]] },
+  { juzNumber: 20, label: 'Amman Khalaq', arabicLabel: 'أَمَّنْ خَلَقَ', versesCount: 171, ranges: [[27, 56, 93], [28, 1, 88], [29, 1, 45]] },
+  { juzNumber: 21, label: 'Utlu Mā Ūḥiya', arabicLabel: 'ٱتْلُ مَا أُوحِىَ', versesCount: 178, ranges: [[29, 46, 69], [30, 1, 60], [31, 1, 34], [32, 1, 30], [33, 1, 30]] },
+  { juzNumber: 22, label: 'Wa May-Yaqnut', arabicLabel: 'وَمَنْ يَقْنُتْ', versesCount: 169, ranges: [[33, 31, 73], [34, 1, 54], [35, 1, 45], [36, 1, 27]] },
+  { juzNumber: 23, label: 'Wa Mā Liya', arabicLabel: 'وَمَا لِىَ', versesCount: 357, ranges: [[36, 28, 83], [37, 1, 182], [38, 1, 88], [39, 1, 31]] },
+  { juzNumber: 24, label: 'Faman Aẓlam', arabicLabel: 'فَمَنْ أَظْلَمُ', versesCount: 175, ranges: [[39, 32, 75], [40, 1, 85], [41, 1, 46]] },
+  { juzNumber: 25, label: 'Ilayhi Yuraddu', arabicLabel: 'إِلَيْهِ يُرَدُّ', versesCount: 246, ranges: [[41, 47, 54], [42, 1, 53], [43, 1, 89], [44, 1, 59], [45, 1, 37]] },
+  { juzNumber: 26, label: 'Ḥā-Mīm', arabicLabel: 'حم', versesCount: 195, ranges: [[46, 1, 35], [47, 1, 38], [48, 1, 29], [49, 1, 18], [50, 1, 45], [51, 1, 30]] },
+  { juzNumber: 27, label: 'Qāla Famā Khaṭbukum', arabicLabel: 'قَالَ فَمَا خَطْبُكُمْ', versesCount: 399, ranges: [[51, 31, 60], [52, 1, 49], [53, 1, 62], [54, 1, 55], [55, 1, 78], [56, 1, 96], [57, 1, 29]] },
+  { juzNumber: 28, label: 'Qad Sami‘allāh', arabicLabel: 'قَدْ سَمِعَ ٱللَّهُ', versesCount: 137, ranges: [[58, 1, 22], [59, 1, 24], [60, 1, 13], [61, 1, 14], [62, 1, 11], [63, 1, 11], [64, 1, 18], [65, 1, 12], [66, 1, 12]] },
+  { juzNumber: 29, label: 'Tabārakalladhī', arabicLabel: 'تَبَارَكَ ٱلَّذِى', versesCount: 431, ranges: [[67, 1, 30], [68, 1, 52], [69, 1, 52], [70, 1, 44], [71, 1, 28], [72, 1, 28], [73, 1, 20], [74, 1, 56], [75, 1, 40], [76, 1, 31], [77, 1, 50]] },
+  {
+    juzNumber: 30,
+    label: '‘Amma Yatasa’alūn',
+    arabicLabel: 'عَمَّ يَتَسَاءَلُونَ',
+    versesCount: 564,
+    ranges: [
+      [78, 1, 40], [79, 1, 46], [80, 1, 42], [81, 1, 29], [82, 1, 19],
+      [83, 1, 36], [84, 1, 25], [85, 1, 22], [86, 1, 17], [87, 1, 19],
+      [88, 1, 26], [89, 1, 30], [90, 1, 20], [91, 1, 15], [92, 1, 21],
+      [93, 1, 11], [94, 1, 8], [95, 1, 8], [96, 1, 19], [97, 1, 5],
+      [98, 1, 8], [99, 1, 8], [100, 1, 11], [101, 1, 11], [102, 1, 8],
+      [103, 1, 3], [104, 1, 9], [105, 1, 5], [106, 1, 4], [107, 1, 7],
+      [108, 1, 3], [109, 1, 6], [110, 1, 3], [111, 1, 5], [112, 1, 4],
+      [113, 1, 5], [114, 1, 6],
+    ],
+  },
+];
+
+export const JUZ_BOUNDARIES = RAW_JUZ_SPECS.map((spec) => {
+  const first = spec.ranges[0];
+  const last = spec.ranges[spec.ranges.length - 1];
+  return {
+    juzNumber: spec.juzNumber,
+    label: spec.label,
+    arabicLabel: spec.arabicLabel,
+    startSurah: first[0],
+    startAyah: first[1],
+    endSurah: last[0],
+    endAyah: last[2],
+    versesCount: spec.versesCount,
+    surahRanges: spec.ranges.map(([surahId, startAyah, endAyah]) => ({
+      surahId,
+      startAyah,
+      endAyah,
+    })),
+  };
+});
+
+export function getJuzBoundary(juzNumber: number) {
+  return JUZ_BOUNDARIES.find((j) => j.juzNumber === juzNumber) ?? JUZ_BOUNDARIES[0];
+}
+
+export function getJuzForVerse(surahId: number, ayahNumber: number): number {
+  for (const juz of JUZ_BOUNDARIES) {
+    for (const r of juz.surahRanges) {
+      if (r.surahId === surahId && ayahNumber >= r.startAyah && ayahNumber <= r.endAyah) {
+        return juz.juzNumber;
+      }
+    }
+  }
+  return SURAH_DIRECTORY.find((s) => s.id === surahId)?.juz ?? 1;
+}
+
+export function getNextPositionInJuz(
+  juzNumber: number,
+  currentSurahId: number,
+  currentAyahNumber: number
+): { surahId: number; ayahNumber: number } | null {
+  const juz = getJuzBoundary(juzNumber);
+  const idx = juz.surahRanges.findIndex(
+    (r) =>
+      r.surahId === currentSurahId &&
+      currentAyahNumber >= r.startAyah &&
+      currentAyahNumber <= r.endAyah
+  );
+  if (idx < 0) return null;
+  const currentRange = juz.surahRanges[idx];
+  if (currentAyahNumber < currentRange.endAyah) {
+    return { surahId: currentSurahId, ayahNumber: currentAyahNumber + 1 };
+  }
+  const nextRange = juz.surahRanges[idx + 1];
+  if (!nextRange) return null;
+  return { surahId: nextRange.surahId, ayahNumber: nextRange.startAyah };
 }

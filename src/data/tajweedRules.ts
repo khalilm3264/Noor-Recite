@@ -7,7 +7,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'غُنَّة',
     tagline: 'Resonant Nasalization',
     description:
-      'A sustained, melodious nasal resonance held for two counts (harakat) when pronouncing Noon Mushaddadah (نّ) or Meem Mushaddadah (مّ).',
+      'Sustained nasal resonance held for two counts on doubled Noon (نّ) or Meem (مّ).',
     makhraj: 'Al-Khayshum (Nasal Passage)',
     harakatCount: '2 Harakat',
     letters: ['نّ', 'مّ'],
@@ -17,7 +17,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 1,
     exampleArabic: 'بِرَبِّ ٱلنَّاسِ',
     exampleTransliteration: 'bi-rabbin-naas',
-    exampleFocus: 'Hold the doubled Noon (نّ) gently through the nose for two rhythmic beats.',
+    exampleFocus: 'Hold the doubled Noon (نّ) gently through the nose for two counts.',
   },
   {
     type: 'qalqalah',
@@ -25,7 +25,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'قَلْقَلَة',
     tagline: 'Echoing Articulation Bounce',
     description:
-      'A crisp, subtle acoustic release or echo when one of the five Qalqalah letters carries a Sukoon (rest) or appears at the end of a verse.',
+      'Brief echoing release when any of the five Qalqalah letters carries a Sukoon or ends a verse.',
     makhraj: 'Throat, Tongue & Lips (Released Stop)',
     harakatCount: 'Crisp Release',
     letters: ['ق', 'ط', 'ب', 'ج', 'د'],
@@ -35,7 +35,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 1,
     exampleArabic: 'ٱللَّهُ أَحَدٌ',
     exampleTransliteration: 'Allaahu Ahad',
-    exampleFocus: 'When stopping on Daal (دٌ), release the tongue cleanly with a resonant bounce.',
+    exampleFocus: 'Release Daal (دٌ) cleanly with a light bounce when stopping.',
   },
   {
     type: 'idgham',
@@ -43,7 +43,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'إِدْغَام',
     tagline: 'Harmonic Letter Merging',
     description:
-      'Seamless merging of a silent Noon (نْ) or Tanween into one of the six YARMALOON letters, creating fluid acoustic continuity between words.',
+      'Merges silent Noon (نْ) or Tanween into the six Yarmaloon letters for smooth flow between words.',
     makhraj: 'Merged Articulation Point',
     harakatCount: '2 Harakat (with Ghunnah)',
     letters: ['ي', 'ر', 'م', 'ل', 'و', 'ن'],
@@ -53,7 +53,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 4,
     exampleArabic: 'كُفُوًا أَحَدٌ / وَلَمْ يَكُن لَّهُۥ',
     exampleTransliteration: 'wa lam yakul-lahu',
-    exampleFocus: 'Noon Sakinah before Laam (ل) merges completely without nasalization (Idgham Bila Ghunnah).',
+    exampleFocus: 'Noon Sakinah before Laam (ل) merges completely without nasalization.',
   },
   {
     type: 'ikhfa',
@@ -61,7 +61,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'إِخْفَاء',
     tagline: 'Veiled Nasal Transition',
     description:
-      'A balanced state between full clarity and complete merging where Noon Sakinah or Tanween is veiled with a soft nasal hum before 15 consonants.',
+      'Softly veils Noon Sakinah or Tanween with a two-count nasal hum before 15 letters.',
     makhraj: 'Al-Khayshum + Approaching Letter',
     harakatCount: '2 Harakat',
     letters: ['ت', 'ث', 'ج', 'د', 'ذ', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ف', 'ق', 'ك'],
@@ -71,7 +71,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 2,
     exampleArabic: 'مِن شَرِّ مَا خَلَقَ',
     exampleTransliteration: 'min sharri maa khalaq',
-    exampleFocus: 'Hover the tongue near Sheen (ش) while sustaining a soft 2-count nasal resonance.',
+    exampleFocus: 'Hover near Sheen (ش) while holding a soft two-count nasal tone.',
   },
   {
     type: 'madd',
@@ -79,7 +79,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'مَدّ',
     tagline: 'Measured Vowel Elongation',
     description:
-      'Disciplined lengthening of open vowel sounds (Alif, Waw, Ya) ranging from 2 natural counts up to 4, 5, or 6 counts before Hamza or Sukoon.',
+      'Extends long vowels (Alif, Waw, Ya) from 2 natural counts up to 4, 5, or 6 counts before Hamza or Sukoon.',
     makhraj: 'Al-Jawf (Oral & Throat Cavity)',
     harakatCount: '2 to 6 Harakat',
     letters: ['ا', 'و', 'ي'],
@@ -89,7 +89,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 7,
     exampleArabic: 'وَلَا ٱلضَّآلِّينَ',
     exampleTransliteration: 'wa lad-daaaalleen',
-    exampleFocus: 'Madd Lazim Kalimi Muthaqqal extends the Alif for a full 6 measured beats before the doubled Laam.',
+    exampleFocus: 'Extend the Alif for 6 steady counts before the doubled Laam.',
   },
   {
     type: 'tafkhim',
@@ -97,7 +97,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     arabicName: 'تَفْخِيم',
     tagline: 'Elevated Resonance (Heavy Letters)',
     description:
-      'Deep, full-bodied acoustic resonance achieved by elevating the back of the tongue toward the soft palate when articulating the seven heavy letters.',
+      'Full, heavy articulation produced by raising the back of the tongue for the seven heavy letters.',
     makhraj: 'Elevated Posterior Tongue',
     harakatCount: 'Full Resonance',
     letters: ['خ', 'ص', 'ض', 'غ', 'ط', 'ق', 'ظ'],
@@ -107,7 +107,7 @@ export const TAJWEED_RULES: TajweedRuleSpec[] = [
     exampleAyahNumber: 6,
     exampleArabic: 'ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ',
     exampleTransliteration: 'as-siraatal-mustaqeem',
-    exampleFocus: 'Saad (ص), Raa (ر), and Taa (ط) carry rich, grounded resonance without rounding the lips.',
+    exampleFocus: 'Give Saad (ص), Raa (ر), and Taa (ط) deep resonance without rounding the lips.',
   },
 ];
 

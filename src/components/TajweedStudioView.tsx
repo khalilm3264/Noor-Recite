@@ -8,6 +8,7 @@ import {
   Award,
   Bookmark,
   CheckCircle2,
+  Languages,
   Loader2,
   Mic,
   Pause,
@@ -32,11 +33,12 @@ import {
 } from '../utils/pitchAnalysis';
 import { FiligreeDivider } from './RubElHizbIcon';
 import { QiraatExplorerView } from './QiraatExplorerView';
+import { PhonemesGuideView } from './PhonemesGuideView';
 
 interface TajweedStudioViewProps {
   reciter: Reciter;
   surahs?: Surah[];
-  initialTab?: 'rules' | 'grader' | 'qiraat';
+  initialTab?: 'rules' | 'phonemes' | 'grader' | 'qiraat';
   initialGraderTarget?: { surahId: number; ayahNumber: number } | null;
   bookmarkedKeys?: Set<string>;
   activeRiwayah?: RiwayahId;
@@ -49,7 +51,7 @@ interface TajweedStudioViewProps {
 }
 
 
-type StudioTab = 'rules' | 'grader' | 'qiraat';
+type StudioTab = 'rules' | 'phonemes' | 'grader' | 'qiraat';
 
 function pickSupportedRecorderMime(): string | undefined {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
@@ -716,7 +718,7 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
         <div
           role="tablist"
           aria-label="Tajweed Studio modes"
-          className="inline-grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#064E3B]/[0.06] dark:bg-[#0A2921] border border-[#064E3B]/10 dark:border-emerald-300/15 shrink-0"
+          className="grid grid-cols-2 sm:inline-flex sm:flex-wrap gap-1 p-1 rounded-xl bg-[#064E3B]/[0.06] dark:bg-[#0A2921] border border-[#064E3B]/10 dark:border-emerald-300/15 shrink-0"
         >
           <button
             type="button"
@@ -730,6 +732,20 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
             }`}
           >
             Tajweed &amp; Makharij
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studioTab === 'phonemes'}
+            onClick={() => setStudioTab('phonemes')}
+            className={`min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap ${
+              studioTab === 'phonemes'
+                ? 'bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22] shadow-xs'
+                : 'text-[#404944] hover:text-[#022C22] dark:text-emerald-200/80'
+            }`}
+          >
+            <Languages className="w-3.5 h-3.5" />
+            <span>Letter Phonemes &amp; IPA</span>
           </button>
           <button
             type="button"
@@ -762,7 +778,18 @@ export const TajweedStudioView: React.FC<TajweedStudioViewProps> = ({
         </div>
       </div>
 
-      {studioTab === 'qiraat' ? (
+      {studioTab === 'phonemes' ? (
+        <PhonemesGuideView
+          reciter={reciter}
+          onPracticeInReader={onPracticeInReader}
+          onOpenVerseToneGrader={(surahId, ayahNumber) => {
+            setGraderSurahId(surahId);
+            setGraderAyahNum(ayahNumber);
+            setStudioTab('grader');
+          }}
+          onPauseReaderAudio={onPauseReaderAudio}
+        />
+      ) : studioTab === 'qiraat' ? (
         <QiraatExplorerView
           activeRiwayah={activeRiwayah}
           maghrebiOrthography={maghrebiOrthography}

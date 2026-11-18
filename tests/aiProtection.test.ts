@@ -43,9 +43,33 @@ test('HTTP limits reject cross-site and excessive requests without trusting spoo
     assert.equal((await post({ 'Sec-Fetch-Site': 'cross-site' })).status, 403);
     assert.equal((await post({ Origin: 'https://noor.example' })).status, 200);
     assert.equal((await post({ Origin: 'https://noor.example' })).status, 200);
-    const rejected = await post({ Origin: 'https://noor.example', 'X-Forwarded-For': '203.0.113.99' });
+    const rejected = await post({
+      Origin: 'https://noor.example',
+      'X-Forwarded-For': '203.0.113.99',
+      Forwarded: 'for=203.0.113.99;proto=https',
+    });
     assert.equal(rejected.status, 429);
     assert.ok(rejected.headers.get('retry-after'));
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('HTTP limits isolate per-client IPs from Forwarded and X-Forwarded-For when trust proxy is configured', async () => {
+  const app = express();
+  app.set('trust proxy', 1);
+  app.post('/api/test', sameOriginOnly('https://noor.example'), ...createAiRequestLimits(1, 10), (_req, res) => res.json({ ok: true }));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = (server.address() as { port: number }).port;
+  const url = `http://127.0.0.1:${port}/api/test`;
+  const post = (headers: Record<string, string> = {}) => fetch(url, { method: 'POST', headers });
+  try {
+    assert.equal((await post({ Origin: 'https://noor.example', 'X-Forwarded-For': '198.51.100.10' })).status, 200);
+    assert.equal((await post({ Origin: 'https://noor.example', 'X-Forwarded-For': '198.51.100.10' })).status, 429);
+    assert.equal((await post({ Origin: 'https://noor.example', Forwarded: 'for="198.51.100.20";proto=https' })).status, 200);
+    assert.equal((await post({ Origin: 'https://noor.example', Forwarded: 'for="198.51.100.20";proto=https' })).status, 429);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

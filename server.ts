@@ -228,6 +228,12 @@ const TARGET_LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   ff: 'Fulfulde / Pulaar (standard West African Fula orthography using ɓ, ɗ, ƴ, ŋ accurately, natural Islamic scholarly register).',
   hi: 'Hindi (Devanagari script, clear Hindustani Islamic register).',
   ur: 'Urdu (Nastaliq-compatible Urdu script, natural Islamic register).',
+  fa: 'Persian (Fārsī) in clean, reverent, fluent Iranian/classical Islamic scholarly Persian script (فارسی).',
+  tr: 'Turkish (standard modern Türkçe, clear reverent Islamic register).',
+  ru: 'Russian (Cyrillic script, clear reverent Islamic scholarly register).',
+  zh: 'Simplified Chinese (简体中文) in clear, reverent Islamic scholarly phrasing.',
+  es: 'Spanish (Español) in clear, reverent Islamic scholarly phrasing.',
+  fr: 'French (Français) in clear, reverent Islamic scholarly phrasing.',
 };
 
 async function synthesizeAudioWithRetry(
@@ -306,10 +312,11 @@ async function synthesizeAudioWithRetry(
 
 async function startServer() {
   const app = express();
-  // Only trust proxy addresses explicitly configured by the deployment operator.
-  // Never blindly trust arbitrary X-Forwarded-For headers from public clients.
+  // Trust explicitly configured proxy CIDRs, or the single reverse-proxy hop in Cloud Run / hosted environments.
   if (process.env.TRUSTED_PROXY_CIDRS) {
     app.set('trust proxy', process.env.TRUSTED_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean));
+  } else {
+    app.set('trust proxy', 1);
   }
   const aiPaths = ['/api/tts', '/api/grade-recitation', '/api/translate-batch'];
   app.post(
@@ -550,7 +557,7 @@ async function startServer() {
           config: {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
             systemInstruction:
-              'You are an Islamic scholar and linguistic translator specializing in accurate, reverent translations of the Qur’an, Hadith, Duas, and Salah manuals across Bangla, Bahasa Melayu/Indonesia, Pan-Hausa, and Fulfulde (Fula).',
+              'You are an Islamic scholar and linguistic translator specializing in accurate, reverent translations of the Qur’an, Hadith, Duas, and Salah manuals across Bangla, Bahasa Melayu/Indonesia, Hausa, Fulfulde (Fula), Persian (Fārsī), Turkish (Türkçe), Russian (Русский), Simplified Chinese (中文), Spanish (Español), and French (Français).',
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -594,8 +601,27 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    const disableClientWsPlugin = {
+      name: 'disable-vite-client-ws',
+      enforce: 'post' as const,
+      transform(code: string, id: string) {
+        const cleanId = id.split('?')[0].replace(/\\/g, '/');
+        if (cleanId.endsWith('/vite/dist/client/client.mjs')) {
+          return {
+            code: code.replace(
+              'transport.connect(createHMRHandler(handleMessage));',
+              '/* WebSocket transport disabled while HMR/WS are disabled */'
+            ),
+            map: null,
+          };
+        }
+        return null;
+      },
+    };
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      plugins: [disableClientWsPlugin],
+      server: { middlewareMode: true, hmr: false, ws: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);

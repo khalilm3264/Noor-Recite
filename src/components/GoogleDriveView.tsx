@@ -740,7 +740,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
           {user && (
             <div className="rounded-2xl border border-[#D97706]/25 dark:border-amber-400/25 bg-[#FEF3C7]/25 dark:bg-amber-950/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-[#022C22] dark:text-[#E6FFF4]">
-                Signed in as <span className="font-bold">{user.email || user.displayName}</span>. Session tokens remain in memory only—reconnect to resume Google Drive access.
+                Signed in as <span className="font-bold">{user.email || user.displayName}</span>. Session tokens remain in memory only; reconnect to resume Google Drive access.
               </div>
               <button
                 type="button"
@@ -1343,7 +1343,7 @@ export const GoogleDriveView: React.FC<GoogleDriveViewProps> = ({
                                       day: 'numeric',
                                       year: 'numeric',
                                     })
-                                  : '—'}{' '}
+                                  : '-'}{' '}
                                 {file.size ? `· ${formatDriveBytes(file.size)}` : ''}
                               </p>
                             </div>

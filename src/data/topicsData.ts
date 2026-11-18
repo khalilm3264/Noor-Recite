@@ -99,7 +99,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
     featured: true,
     tagline: 'Anchor your heart through seasons of hardship, loss, and quiet perseverance.',
     description:
-      'Discover how the Noble Qur’ān frames beautiful patience (Ṣabrun Jamīl) — not merely enduring passively, but remaining anchored in prayer, dignity, and absolute trust in Allāh’s timing.',
+      'How the Qur’ān frames beautiful patience (Ṣabrun Jamīl) through prayer, dignity, and steady trust in Allāh.',
     subFilters: ['All', 'Patience in Trials', 'Prayer & Reliance', 'Promise of Reward', 'Prophetic Du‘ā’s'],
     featuredAyahFocus: {
       verseKey: '2:153',
@@ -125,7 +125,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         translationUr:
           'اے ایمان والو! صبر اور نماز سے مدد حاصل کرو، بے شک اللہ صبر کرنے والوں کے ساتھ ہے۔',
         reflectionNote:
-          'Ibn Kathīr notes that when overwhelmed by any affair, the Prophet ﷺ turned immediately to Salah — uniting inner restraint (Ṣabr) with outward devotion.',
+          'When facing hardship, the Prophet ﷺ turned immediately to Salah, uniting inner steadiness with devotion.',
         tajweedRule: 'Madd Munfaṣil (4–5 counts) · Tafkhīm on Ṣād',
       },
       {
@@ -182,7 +182,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         translationUr:
           'سوائے ان لوگوں کے جو ایمان لائے، نیک عمل کیے اور آپس میں حق اور صبر کی نصیحت کی۔',
         reflectionNote:
-          'Patience in the Qur’ān is communal — believers encourage one another gently toward resilience.',
+          'Patience is shared in community as believers encourage one another toward resilience.',
         tajweedRule: 'Qalqalah Kubrā at Waqf on بِٱلصَّبْرِ',
       },
       {
@@ -201,7 +201,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         translationUr:
           'اے ہمارے رب! ہم پر صبر انڈیل دے اور ہمارے قدم مضبوط جما دے۔',
         reflectionNote:
-          'Note the verb "afrigh" ("pour out like rain filling a vessel") — asking for enveloping tranquility from head to foot.',
+          'The verb "afrigh" means "pour down like rain", asking for calm strength from head to foot.',
         tajweedRule: 'Idghām with Ghunnah on صَبْرًا وَثَبِّتْ',
       },
     ],
@@ -229,7 +229,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         translationHi: 'पस बेशक तंगी के साथ आसानी है।',
         translationUr: 'پس بے شک تنگی کے ساتھ آسانی ہے۔',
         reflectionNote:
-          'Notice "ma‘a" (together with), not "ba‘da" (after): relief and inner mercy walk alongside the struggle.',
+          'Using "ma‘a" (with) rather than "ba‘da" (after) shows that relief accompanies the trial itself.',
         tajweedRule: 'Ghunnah Mushaddadah on فَإِنَّ (2 counts)',
       },
       {
@@ -308,7 +308,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         translationUr:
           'کہہ دو: اے میرے بندو جنہوں نے اپنی جانوں پر زیادتی کی ہے، اللہ کی رحمت سے مایوس نہ ہو۔',
         reflectionNote:
-          'Even while addressing sinners, Allāh calls them "Yā ‘Ibādī" — "O My beloved servants."',
+          'Even while calling sinners back, Allāh addresses them warmly as "My servants."',
         tajweedRule: 'Ikhfā’ on أَنفُسِهِمْ · Idghām bilā Ghunnah on مِن رَّحْمَةِ',
       },
       {
@@ -321,7 +321,7 @@ export const QURAN_TOPICS: QuranTopicCollection[] = [
         arabic: 'وَإِذَا سَأَلَكَ عِبَادِى عَنِّى فَإِنِّى قَرِيبٌ ۖ أُجِيبُ دَعْوَةَ ٱلدَّاعِ إِذَا دَعَانِ',
         transliteration: 'Wa-idhā sa’alaka ‘ibādī ‘annī fa-innī qarīb; ujību da‘wata d-dā‘i idhā da‘ān.',
         translationEn:
-          'And when My servants ask you concerning Me — indeed, I am near. I answer the call of the supplicant whenever he calls upon Me.',
+          'When My servants ask you about Me, indeed I am near. I answer the call of the supplicant whenever they call upon Me.',
         translationHi:
           'और जब मेरे बंदे आपसे मेरे बारे में पूछें तो मैं बहुत करीब हूँ; दुआ करने वाले की दुआ क़बूल करता हूँ।',
         translationUr:

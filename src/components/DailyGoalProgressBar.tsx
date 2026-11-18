@@ -44,15 +44,15 @@ export const DailyGoalProgressBar: React.FC<DailyGoalProgressBarProps> = ({
   const dayUnit = streakDays === 1 ? 'day' : 'days';
 
   const encouragement = goalReached
-    ? `Goal complete — ${versesRecitedCount} verses recited today`
+    ? `Goal complete · ${versesRecitedCount} verses recited today`
     : versesRecitedCount === 0
     ? `Recite ${safeGoal} verses to complete today's goal`
     : remaining === 1
     ? '1 verse away from your daily goal'
     : clampedPct >= 75
-    ? `Almost there — ${remaining} verses left`
+    ? `Almost there · ${remaining} verses left`
     : clampedPct >= 50
-    ? `Halfway there — ${remaining} verses remaining`
+    ? `Halfway there · ${remaining} verses remaining`
     : `${remaining} verses to go today`;
 
   return (

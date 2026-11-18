@@ -1,5 +1,5 @@
-import type { RequestHandler } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import type { Request, RequestHandler } from 'express';
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -65,6 +65,33 @@ export function sameOriginOnly(appUrl?: string): RequestHandler {
   };
 }
 
+function parseForwardedFor(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const entries = header.split(',');
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const match = entries[i].match(/(?:^|;)\s*for=(?:"?\[?([^;\],"\s]+)\]?"?)/i);
+    if (match?.[1]) {
+      const candidate = match[1].trim();
+      if (candidate && !candidate.startsWith('_') && candidate.toLowerCase() !== 'unknown') {
+        return candidate.replace(/^(\d+\.\d+\.\d+\.\d+):\d+$/, '$1');
+      }
+    }
+  }
+  return undefined;
+}
+
+function resolveClientRateLimitKey(req: Request): string {
+  const trustProxy = req.app.get('trust proxy');
+  let clientIp = req.ip || req.socket?.remoteAddress || '127.0.0.1';
+  if (trustProxy && clientIp === req.socket?.remoteAddress) {
+    const forwardedIp = parseForwardedFor(req.get('forwarded'));
+    if (forwardedIp) {
+      clientIp = forwardedIp;
+    }
+  }
+  return ipKeyGenerator(clientIp);
+}
+
 export function createAiRequestLimits(perMinute = 30, perDay = 200): RequestHandler[] {
   return [
     rateLimit({
@@ -72,6 +99,7 @@ export function createAiRequestLimits(perMinute = 30, perDay = 200): RequestHand
       limit: perMinute,
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      keyGenerator: resolveClientRateLimitKey,
       message: { error: 'Too many AI requests. Please wait a minute and try again.' },
     }),
     rateLimit({
@@ -79,6 +107,7 @@ export function createAiRequestLimits(perMinute = 30, perDay = 200): RequestHand
       limit: perDay,
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      keyGenerator: resolveClientRateLimitKey,
       message: { error: 'Your daily AI request allowance has been reached.' },
     }),
   ];

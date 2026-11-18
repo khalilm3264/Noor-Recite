@@ -1,5 +1,14 @@
 import React from 'react';
-import { BookOpen, Compass, Bookmark, Sparkles, SlidersHorizontal, Sun, Moon, HeartHandshake, MoonStar, ScrollText, Award, HardDrive } from 'lucide-react';
+import {
+  BookOpen,
+  Bookmark,
+  HeartHandshake,
+  MoonStar,
+  ScrollText,
+  SlidersHorizontal,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { AppScreen } from '../types/quran';
 import { RubElHizbBadge } from './RubElHizbIcon';
 
@@ -13,20 +22,79 @@ interface TopNavProps {
   isDriveConnected?: boolean;
 }
 
-const NAV_ITEMS: {
+const DESKTOP_NAV_ITEMS: {
   id: AppScreen;
   label: string;
-  mobileLabel?: string;
+  matches: AppScreen[];
+}[] = [
+  {
+    id: 'reader',
+    label: "Qur'an",
+    matches: ['reader', 'surahs', 'hifz', 'topics'],
+  },
+  {
+    id: 'duas',
+    label: 'Duas',
+    matches: ['duas'],
+  },
+  {
+    id: 'hadiths',
+    label: 'Hadiths',
+    matches: ['hadiths'],
+  },
+  {
+    id: 'salah',
+    label: 'Salah',
+    matches: ['salah'],
+  },
+  {
+    id: 'tajweed',
+    label: 'Tajweed',
+    matches: ['tajweed'],
+  },
+  {
+    id: 'bookmarks',
+    label: 'Saved',
+    matches: ['bookmarks', 'khatmah', 'drive'],
+  },
+];
+
+const MOBILE_NAV_ITEMS: {
+  id: AppScreen;
+  label: string;
+  matches: AppScreen[];
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { id: 'reader', label: 'Read', icon: BookOpen },
-  { id: 'surahs', label: 'Surahs', icon: Compass },
-  { id: 'hifz', label: 'Hifz Quiz', mobileLabel: 'Hifz', icon: Award },
-  { id: 'salah', label: 'Salah & Prayers', mobileLabel: 'Salah', icon: MoonStar },
-  { id: 'duas', label: 'Duas & Kalimas', mobileLabel: 'Duas', icon: HeartHandshake },
-  { id: 'hadiths', label: 'Popular Hadiths', mobileLabel: 'Hadiths', icon: ScrollText },
-  { id: 'tajweed', label: 'Tajweed', icon: Sparkles },
-  { id: 'bookmarks', label: 'Bookmarks', mobileLabel: 'Saved', icon: Bookmark },
+  {
+    id: 'reader',
+    label: "Qur'an",
+    matches: ['reader', 'surahs', 'hifz', 'topics', 'tajweed'],
+    icon: BookOpen,
+  },
+  {
+    id: 'duas',
+    label: 'Duas',
+    matches: ['duas'],
+    icon: HeartHandshake,
+  },
+  {
+    id: 'hadiths',
+    label: 'Hadiths',
+    matches: ['hadiths'],
+    icon: ScrollText,
+  },
+  {
+    id: 'salah',
+    label: 'Salah',
+    matches: ['salah'],
+    icon: MoonStar,
+  },
+  {
+    id: 'bookmarks',
+    label: 'Saved',
+    matches: ['bookmarks', 'khatmah', 'drive'],
+    icon: Bookmark,
+  },
 ];
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -40,7 +108,7 @@ export const TopNav: React.FC<TopNavProps> = ({
 }) => {
   return (
     <header className="shrink-0 relative z-30 h-13 sm:h-14 [@media(max-height:540px)]:h-11 border-b border-[#064E3B]/10 dark:border-emerald-300/12 bg-[#FBFBFA]/95 dark:bg-[#041D17]/95 backdrop-blur-md">
-      <div className="max-w-[1600px] mx-auto h-full px-3 sm:px-5 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 lg:gap-8">
+      <div className="max-w-[1600px] mx-auto h-full px-3 sm:px-5 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
         {/* Zone 1: Single-line Brand Wordmark */}
         <button
           type="button"
@@ -53,31 +121,35 @@ export const TopNav: React.FC<TopNavProps> = ({
           </span>
         </button>
 
-        {/* Zone 2: Clean Single-Line Navigation Links (Landscape Phone, Tablet & Desktop: >=640px) */}
-        <nav className="hidden sm:flex items-center gap-2 md:gap-3 lg:gap-4 xl:gap-6 min-w-0" aria-label="Primary navigation">
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              activeScreen === item.id ||
-              (item.id === 'surahs' && (activeScreen === 'khatmah' || activeScreen === 'topics'));
+        {/* Zone 2: Clean Single-Line Navigation Links (>=640px) */}
+        <nav
+          className="hidden sm:flex items-center gap-3.5 md:gap-5 lg:gap-7 min-w-0"
+          aria-label="Primary navigation"
+        >
+          {DESKTOP_NAV_ITEMS.map((item) => {
+            const isActive = item.matches.includes(activeScreen);
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onSelectScreen(item.id)}
-                className={`relative py-1.5 sm:py-2 text-xs md:text-[13px] xl:text-sm font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] rounded ${
+                className={`relative py-2 text-xs md:text-sm font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] rounded inline-flex items-center gap-1.5 ${
                   isActive
                     ? 'text-[#064E3B] dark:text-amber-300 font-semibold'
                     : 'text-[#404944] hover:text-[#022C22] dark:text-emerald-200/75 dark:hover:text-[#E6FFF4]'
                 }`}
               >
-                <span className="xl:hidden">
-                  {item.mobileLabel ?? item.label}
-                  {item.id === 'bookmarks' && bookmarkCount > 0 ? ` (${bookmarkCount})` : ''}
-                </span>
-                <span className="hidden xl:inline">
+                <span>
                   {item.label}
                   {item.id === 'bookmarks' && bookmarkCount > 0 ? ` (${bookmarkCount})` : ''}
                 </span>
+                {item.id === 'bookmarks' && isDriveConnected && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0"
+                    title="Google Drive Sync Connected"
+                    aria-hidden="true"
+                  />
+                )}
                 {isActive && (
                   <span
                     className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[#D97706] dark:bg-amber-400"
@@ -89,34 +161,14 @@ export const TopNav: React.FC<TopNavProps> = ({
           })}
         </nav>
 
-        {/* Zone 3: Drive Sync + Theme Switch + Preferences */}
+        {/* Zone 3: Theme Switch + Preferences */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => onSelectScreen('drive')}
-            aria-label="Google Drive Study Hub"
-            title={isDriveConnected ? 'Google Drive Connected' : 'Google Drive Study Hub'}
-            className={`relative min-h-[36px] sm:min-h-[38px] px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
-              activeScreen === 'drive'
-                ? 'bg-[#064E3B]/12 text-[#064E3B] dark:bg-emerald-400/20 dark:text-amber-300 border border-[#064E3B]/20 dark:border-emerald-300/30'
-                : 'text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200 dark:hover:text-amber-300 dark:hover:bg-emerald-400/10'
-            }`}
-          >
-            <HardDrive className="w-4 h-4 shrink-0" />
-            <span className="hidden lg:inline">Drive</span>
-            {isDriveConnected && (
-              <span
-                className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0"
-                aria-hidden="true"
-              />
-            )}
-          </button>
           <button
             type="button"
             onClick={onToggleDarkMode}
             aria-label={darkMode ? 'Switch to light parchment mode' : 'Switch to night cypress mode'}
             title={darkMode ? 'Light Parchment' : 'Night Cypress'}
-            className="min-h-[36px] min-w-[36px] sm:min-h-[38px] sm:min-w-[38px] flex items-center justify-center rounded-lg text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200 dark:hover:text-amber-300 dark:hover:bg-emerald-400/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
+            className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200 dark:hover:text-amber-300 dark:hover:bg-emerald-400/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
           >
             {darkMode ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
           </button>
@@ -125,10 +177,11 @@ export const TopNav: React.FC<TopNavProps> = ({
             onClick={onOpenSettings}
             aria-label="Preferences"
             title="Reading & Audio Preferences"
-            className="min-h-[36px] sm:min-h-[38px] px-2.5 sm:px-3 lg:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs font-semibold bg-[#064E3B] text-white hover:bg-[#003527] dark:bg-emerald-500 dark:text-[#022C22] dark:hover:bg-emerald-400 transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
+            className="min-h-[38px] px-3 lg:px-3.5 py-2 rounded-lg text-xs font-semibold bg-[#064E3B] text-white hover:bg-[#003527] dark:bg-emerald-500 dark:text-[#022C22] dark:hover:bg-emerald-400 transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span className="sm:hidden md:inline">Preferences</span>
+            <span className="hidden md:inline">Preferences</span>
+            <span className="md:hidden">Settings</span>
           </button>
         </div>
       </div>
@@ -147,28 +200,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   return (
     <nav
-      className="sm:hidden shrink-0 relative z-40 h-12 [@media(max-height:540px)]:h-10 border-t border-[#064E3B]/10 dark:border-emerald-300/15 bg-[#FFFFFF]/96 dark:bg-[#041D17]/96 backdrop-blur-lg"
+      className="sm:hidden shrink-0 relative z-40 h-13 [@media(max-height:540px)]:h-11 border-t border-[#064E3B]/10 dark:border-emerald-300/15 bg-[#FFFFFF]/96 dark:bg-[#041D17]/96 backdrop-blur-lg"
       aria-label="Mobile navigation"
     >
-      <div className="grid grid-cols-8 h-full">
-        {NAV_ITEMS.map((item) => {
+      <div className="grid grid-cols-5 h-full">
+        {MOBILE_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            activeScreen === item.id ||
-            (item.id === 'surahs' && (activeScreen === 'khatmah' || activeScreen === 'topics'));
+          const isActive = item.matches.includes(activeScreen);
           return (
             <button
               key={item.id}
               type="button"
               onClick={() => onSelectScreen(item.id)}
-              className={`flex flex-col items-center justify-center gap-0.5 px-0.5 text-[9.5px] tracking-tight font-medium transition-colors whitespace-nowrap ${
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium transition-colors whitespace-nowrap ${
                 isActive
                   ? 'text-[#064E3B] dark:text-amber-300 font-semibold'
                   : 'text-[#404944] dark:text-emerald-200/70'
               }`}
             >
-              <Icon className="w-[16px] h-[16px]" />
-              <span className="[@media(max-height:540px)]:hidden">{item.mobileLabel ?? item.label}</span>
+              <Icon className="w-[18px] h-[18px]" />
+              <span className="[@media(max-height:540px)]:hidden">{item.label}</span>
             </button>
           );
         })}
@@ -176,3 +227,4 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     </nav>
   );
 };
+

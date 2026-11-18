@@ -1,9 +1,25 @@
+import { ALL_LOCAL_QARI_URLS, LOCAL_QARI_AUDIO_MAP } from '../data/localQariAudio';
+import { ensureAudioCached, getCachedAudioSrc } from './audioCache';
+
 export type AiVoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr';
 
 export interface AiTtsOptions {
   voiceName?: AiVoiceName;
   style?: string;
   signal?: AbortSignal;
+}
+
+export interface AiTtsPrefetchItem {
+  text: string;
+  voiceName?: AiVoiceName;
+  style?: string;
+}
+
+export interface AiTtsPrefetchOptions {
+  signal?: AbortSignal;
+  concurrency?: number;
+  delayMs?: number;
+  maxNetworkFetches?: number;
 }
 
 export const QARI_TTS_STYLES = {
@@ -19,22 +35,7 @@ export const QARI_TTS_STYLES = {
 export const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 
-const MAX_CLIENT_CACHE = 80;
-const blobUrlCache = new Map<string, string>();
-const inFlightRequests = new Map<string, Promise<string>>();
-
-function setClientCachedUrl(key: string, objectUrl: string) {
-  if (blobUrlCache.has(key)) {
-    blobUrlCache.delete(key);
-  } else if (blobUrlCache.size >= MAX_CLIENT_CACHE) {
-    const oldest = blobUrlCache.entries().next().value;
-    if (oldest) {
-      blobUrlCache.delete(oldest[0]);
-      URL.revokeObjectURL(oldest[1]);
-    }
-  }
-  blobUrlCache.set(key, objectUrl);
-}
+const PROTECTED_LOCAL_QARI_URLS = new Set<string>(ALL_LOCAL_QARI_URLS);
 
 export function normalizeArabicForTts(text: string): string {
   return text
@@ -50,29 +51,38 @@ export function normalizeArabicForTts(text: string): string {
     .trim();
 }
 
-function buildCacheKey(normalizedText: string, voiceName: AiVoiceName, style: string): string {
-  return `${voiceName}::${style}::${normalizedText}`;
+export function getLocalQariAudioPath(text: string): string | null {
+  const normalized = normalizeArabicForTts(text);
+  if (!normalized) return null;
+  return LOCAL_QARI_AUDIO_MAP[normalized] ?? null;
 }
 
-export function getCachedAiTtsUrl(text: string, options: AiTtsOptions = {}): string | null {
-  const normalized = normalizeArabicForTts(text);
-  const voiceName = options.voiceName ?? 'Charon';
-  const style =
-    options.style ??
-    QARI_TTS_STYLES.salah;
-  const key = buildCacheKey(normalized, voiceName, style);
-  const found = blobUrlCache.get(key) ?? null;
-  if (found) {
-    // Touch LRU order
-    blobUrlCache.delete(key);
-    blobUrlCache.set(key, found);
+export function getCachedAiTtsUrl(text: string, _options: AiTtsOptions = {}): string | null {
+  const localPath = getLocalQariAudioPath(text);
+  if (!localPath) return null;
+  return getCachedAudioSrc(localPath);
+}
+
+export function clearAudioUnlockFlag(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  if (audio.dataset.unlocking) {
+    delete audio.dataset.unlocking;
   }
-  return found;
+}
+
+export function isUnlockingAudioEvent(audio: HTMLAudioElement | null): boolean {
+  if (!audio) return false;
+  return (
+    audio.dataset.unlocking === '1' ||
+    audio.src === SILENT_WAV_DATA_URI ||
+    audio.currentSrc === SILENT_WAV_DATA_URI
+  );
 }
 
 export function unlockAudioElement(audio: HTMLAudioElement | null) {
   if (!audio) return;
   try {
+    audio.dataset.unlocking = '1';
     audio.muted = true;
     audio.src = SILENT_WAV_DATA_URI;
     const p = audio.play();
@@ -82,12 +92,14 @@ export function unlockAudioElement(audio: HTMLAudioElement | null) {
         audio.muted = false;
       }).catch(() => {
         audio.muted = false;
+        clearAudioUnlockFlag(audio);
       });
     } else {
       audio.muted = false;
     }
   } catch {
     audio.muted = false;
+    clearAudioUnlockFlag(audio);
   }
 }
 
@@ -95,59 +107,78 @@ export async function getAiTtsAudioUrl(
   text: string,
   options: AiTtsOptions = {}
 ): Promise<string> {
-  const normalized = normalizeArabicForTts(text);
-  if (!normalized) {
-    throw new Error('Cannot synthesize empty text.');
+  const localPath = getLocalQariAudioPath(text);
+  if (!localPath) {
+    throw new Error('No local Qari recording available for this phrase.');
   }
 
-  const voiceName = options.voiceName ?? 'Charon';
-  const style =
-    options.style ??
-    QARI_TTS_STYLES.salah;
-  const key = buildCacheKey(normalized, voiceName, style);
-
-  const cached = blobUrlCache.get(key);
-  if (cached) {
-    blobUrlCache.delete(key);
-    blobUrlCache.set(key, cached);
-    return cached;
+  if (options.signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
   }
 
-  const existingInFlight = inFlightRequests.get(key);
-  if (existingInFlight && !options.signal) {
-    return existingInFlight;
+  const cachedBlobUrl = await ensureAudioCached(
+    localPath,
+    options.signal,
+    PROTECTED_LOCAL_QARI_URLS
+  );
+
+  if (options.signal?.aborted) {
+    throw new DOMException('Aborted', 'AbortError');
   }
 
-  const reqPromise = (async () => {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: normalized, voiceName, style }),
-      signal: options.signal,
-    });
+  return cachedBlobUrl ?? localPath;
+}
 
-    if (!res.ok) {
-      const msg = await res.text().catch(() => '');
-      throw new Error(msg || `TTS HTTP ${res.status}`);
+export async function prefetchAiTtsAudio(
+  items: AiTtsPrefetchItem[],
+  options: AiTtsPrefetchOptions = {}
+): Promise<void> {
+  const { signal, concurrency = 4 } = options;
+  if (items.length === 0 || signal?.aborted) return;
+
+  const uniquePaths: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const localPath = getLocalQariAudioPath(item.text);
+    if (!localPath || seen.has(localPath)) continue;
+    seen.add(localPath);
+    uniquePaths.push(localPath);
+  }
+
+  if (uniquePaths.length === 0) return;
+
+  let cursor = 0;
+  const worker = async () => {
+    while (!signal?.aborted) {
+      const idx = cursor++;
+      if (idx >= uniquePaths.length) return;
+      await ensureAudioCached(uniquePaths[idx], signal, PROTECTED_LOCAL_QARI_URLS);
     }
+  };
 
-    const blob = await res.blob();
-    if (!blob.size) {
-      throw new Error('Empty audio payload received from Qari Voice service.');
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, uniquePaths.length) }, () => worker())
+  );
+}
+
+export async function prefetchAllLocalQariAudio(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted || ALL_LOCAL_QARI_URLS.length === 0) return;
+
+  let cursor = 0;
+  const concurrency = 4;
+  const worker = async () => {
+    while (!signal?.aborted) {
+      const idx = cursor++;
+      if (idx >= ALL_LOCAL_QARI_URLS.length) return;
+      await ensureAudioCached(
+        ALL_LOCAL_QARI_URLS[idx],
+        signal,
+        PROTECTED_LOCAL_QARI_URLS
+      );
     }
+  };
 
-    const objectUrl = URL.createObjectURL(blob);
-    setClientCachedUrl(key, objectUrl);
-    return objectUrl;
-  })();
-
-  if (!options.signal) {
-    inFlightRequests.set(key, reqPromise);
-  }
-
-  try {
-    return await reqPromise;
-  } finally {
-    inFlightRequests.delete(key);
-  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, ALL_LOCAL_QARI_URLS.length) }, () => worker())
+  );
 }

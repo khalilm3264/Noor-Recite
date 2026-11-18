@@ -1,6 +1,7 @@
 import { PrayerGuideItem, SalahPostureStep, WuduStep } from '../types/quran';
+import { SALAH_WORD_TIMINGS, expandWordTimings } from './salahWordTimings';
 
-export const PRAYER_GUIDES: PrayerGuideItem[] = [
+const BASE_PRAYER_GUIDES: PrayerGuideItem[] = [
   {
     id: 'salah-fajr',
     category: 'daily',
@@ -142,7 +143,7 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
       'دوسری رکعت میں تشہد پڑھ کر اٹھیں اور تیسری رکعت میں صرف سورۂ فاتحہ آہستہ پڑھیں۔',
       'سلام کے بعد 2 رکعت سنتِ مؤکدہ اور پھر اختیاری 2 رکعت نفل ادا کریں۔',
     ],
-    note: 'Maghrib has the shortest window among the five daily prayers—hasten to offer it promptly after sunset.',
+    note: 'Maghrib has the shortest window among the five daily prayers; offer it promptly after sunset.',
   },
   {
     id: 'salah-isha',
@@ -215,7 +216,7 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     stepsEn: [
       'Take a Ghusl (bath), wear clean clothes, apply perfume, recite Surah Al-Kahf, and send abundant Salawat on the Prophet ﷺ.',
       'Upon entering the Masjid (before the Imam stands for the Khutbah), pray 4 Rakaat Sunnah Mu’akkadah (or 2 Rakaat Tahiyyatul Masjid if the Khutbah has begun).',
-      'Listen silently and attentively to both parts of the Arabic Khutbah (and any preceding talk)—speaking or using phones during the Khutbah is prohibited.',
+      'Listen silently and attentively to both parts of the Khutbah; speaking or using phones during the Khutbah is prohibited.',
       'Stand with the congregation for 2 Rakaat Fard behind the Imam, where the Imam recites Al-Fatiha and Surahs aloud.',
       'After Fard, pray 4 Rakaat Sunnah followed by 2 Rakaat Sunnah (and 2 Nafl if desired).',
     ],
@@ -259,19 +260,19 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     ],
     stepsHi: [
       'ईदगाह/मस्जिद जाने से पहले ग़ुस्ल करें, अच्छे साफ़ कपड़े पहनें, ईद-उल-फ़ित्र पर कुछ मीठा/खजूर खाकर निकलें (और नमाज़ से पहले सदक़ा-ए-फ़ित्र अदा करें)। रास्ते भर तकबीराते-तशरीक़ आहिस्ता/बुलंद पढ़ते जाएँ। ईद की नमाज़ में न अज़ान होती है, न इक़ामत।',
-      'हनफ़ी तरीक़ा (6 ज़ायद तकबीरें): पहली रकअत में तकबीरे-तहरीमा कहकर हाथ बाँधें और सना पढ़ें। फिर इमाम के साथ 3 ज़ायद तकबीरें कहें—पहली और दूसरी पर कानों तक हाथ उठाकर छोड़ दें, तीसरी पर हाथ बाँध लें। फिर इमाम फ़ातिहा व सूरत पढ़ेंगे और रुकू-सजदा पूरा होगा।',
-      'हनफ़ी दूसरी रकअत: इमाम पहले सूरह फ़ातिहा व सूरत पढ़ेंगे। रुकू से पहले 3 ज़ायद तकबीरें कहें—तीनों पर हाथ उठाकर छोड़ दें; फिर चौथी तकबीर ("अल्लाहु अकबर") पर बिना हाथ उठाए सीधे रुकू में जाएँ। सजदा व क़अदा के बाद सलाम फेरें।',
+      'हनफ़ी तरीक़ा (6 ज़ायद तकबीरें): पहली रकअत में तकबीरे-तहरीमा कहकर हाथ बाँधें और सना पढ़ें। फिर इमाम के साथ 3 ज़ायद तकबीरें कहें: पहली और दूसरी पर कानों तक हाथ उठाकर छोड़ दें, तीसरी पर हाथ बाँध लें। फिर इमाम फ़ातिहा व सूरत पढ़ेंगे और रुकू-सजदा पूरा होगा।',
+      'हनफ़ी दूसरी रकअत: इमाम पहले सूरह फ़ातिहा व सूरत पढ़ेंगे। रुकू से पहले 3 ज़ायद तकबीरें कहें, तीनों पर हाथ उठाकर छोड़ दें; फिर चौथी तकबीर ("अल्लाहु अकबर") पर बिना हाथ उठाए सीधे रुकू में जाएँ। सजदा व क़अदा के बाद सलाम फेरें।',
       'शाफ़ई / हंबली तरीक़ा (7 + 5 तकबीरें): पहली रकअत में फ़ातिहा से पहले 7 और दूसरी रकअत में फ़ातिहा से पहले 5 ज़ायद तकबीरें कही जाती हैं।',
       'नमाज़ के बाद बैठकर ईद के दोनों ख़ुत्बे सुनें और फिर दुआ व मुबारकबाद दें। (ईद में ख़ुत्बा नमाज़ के बाद होता है।)',
     ],
     stepsUr: [
       'عیدگاہ یا مسجد جانے سے پہلے غسل کریں، بہترین صاف لباس پہنیں، عید الفطر پر کھجور یا کوئی میٹھی چیز کھا کر نکلیں (اور نماز سے پہلے صدقۂ فطر ادا کریں)۔ راستے میں تکبیرات پڑھتے جائیں۔ عید کی نماز میں نہ اذان ہوتی ہے نہ اقامت۔',
-      'حنفی طریقہ (6 زائد تکبیریں): پہلی رکعت میں تکبیرِ تحریمہ کہہ کر ہاتھ باندھیں اور ثنا پڑھیں۔ پھر امام کے ساتھ 3 زائد تکبیریں کہیں—پہلی اور دوسری پر کانوں تک ہاتھ اٹھا کر چھوڑ دیں، تیسری پر ہاتھ ناف کے نیچے باندھ لیں۔ پھر امام فاتحہ و سورت پڑھیں گے اور رکوع و سجدہ ہوگا۔',
-      'حنفی دوسری رکعت: امام پہلے سورۂ فاتحہ و سورت پڑھیں گے۔ رکوع سے پہلے 3 زائد تکبیریں کہیں—تینوں پر ہاتھ اٹھا کر چھوڑ دیں، پھر چوتھی تکبیر پر ہاتھ اٹھائے بغیر سیدھے رکوع میں جائیں اور نماز مکمل کریں۔',
+      'حنفی طریقہ (6 زائد تکبیریں): پہلی رکعت میں تکبیرِ تحریمہ کہہ کر ہاتھ باندھیں اور ثنا پڑھیں۔ پھر امام کے ساتھ 3 زائد تکبیریں کہیں: پہلی اور دوسری پر کانوں تک ہاتھ اٹھا کر چھوڑ دیں، تیسری پر ہاتھ ناف کے نیچے باندھ لیں۔ پھر امام فاتحہ و سورت پڑھیں گے اور رکوع و سجدہ ہوگا۔',
+      'حنفی دوسری رکعت: امام پہلے سورۂ فاتحہ و سورت پڑھیں گے۔ رکوع سے پہلے 3 زائد تکبیریں کہیں، تینوں پر ہاتھ اٹھا کر چھوڑ دیں، پھر چوتھی تکبیر پر ہاتھ اٹھائے بغیر سیدھے رکوع میں جائیں اور نماز مکمل کریں۔',
       'شافعی / حنبلی طریقہ (7 + 5 تکبیریں): پہلی رکعت میں فاتحہ سے پہلے 7 اور دوسری رکعت میں فاتحہ سے پہلے 5 زائد تکبیریں کہی جاتی ہیں۔',
       'سلام کے بعد بیٹھ کر عید کے دونوں خطبے سنیں (جمعہ کے برعکس عید کا خطبہ نماز کے بعد ہوتا ہے)۔',
     ],
-    note: 'Listen to your local Masjid’s announcement just before Eid Nimaz starts—most Imams briefly remind the congregation whether they follow 3+3 (Hanafi) or 7+5 (Shafi‘i/Hanbali).',
+    note: 'Listen to the Masjid announcement before Eid Nimaz starts; most Imams confirm whether they follow 3+3 (Hanafi) or 7+5 (Shafi‘i/Hanbali).',
     specialAudio: {
       title: 'Takbeer-e-Tashreeq & Eid Takbeerat',
       arabic: 'ٱللَّهُ أَكْبَرُ ٱللَّهُ أَكْبَرُ، لَا إِلَٰهَ إِلَّا ٱللَّهُ وَٱللَّهُ أَكْبَرُ، ٱللَّهُ أَكْبَرُ وَلِلَّهِ ٱلْحَمْدُ',
@@ -297,8 +298,8 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     niyyahArabic: 'نَوَيْتُ أَنْ أُصَلِّيَ لِلَّهِ تَعَالَى أَرْبَعَ تَكْبِيرَاتِ صَلَاةِ ٱلْجَنَازَةِ، ثَنَاءً لِلَّهِ وَصَلَاةً عَلَى ٱلنَّبِيِّ وَدُعَاءً لِهَٰذَا ٱلْمَيِّتِ',
     niyyahTranslit: 'Nawaytu an uṣalliya lillāhi ta‘ālā arba‘a takbīrāti ṣalātil-janāzati thanā’an lillāhi wa ṣalātan ‘alan-nabiyyi wa du‘ā’an lihādhal-mayyit',
     niyyahEn: 'I intend in my heart to pray the 4-Takbeer Funeral Prayer for Allah, praising Allah, sending blessings on the Prophet ﷺ, and praying for this deceased behind the Imam.',
-    niyyahHi: 'मैं दिल से अल्लाह के लिए 4 तकबीरों वाली नमाज़े-जनाज़ा की नियत करता हूँ—अल्लाह की हम्द, नबी ﷺ पर दुरूद और इस मय्यित की मग़फ़िरत की दुआ के साथ।',
-    niyyahUr: 'میں دل سے اللہ تعالیٰ کے لیے چار تکبیروں والی نمازِ جنازہ کی نیت کرتا ہوں—اللہ کی ثنا، نبی ﷺ پر درود اور اس میت کے لیے دعا کی نیت سے۔',
+    niyyahHi: 'मैं दिल से अल्लाह के लिए 4 तकबीरों वाली नमाज़े-जनाज़ा की नियत करता हूँ, अल्लाह की हम्द, नबी ﷺ पर दुरूद और इस मय्यित की मग़फ़िरत की दुआ के साथ।',
+    niyyahUr: 'میں دل سے اللہ تعالیٰ کے لیے چار تکبیروں والی نمازِ جنازہ کی نیت کرتا ہوں، اللہ کی ثنا، نبی ﷺ پر درود اور اس میت کے لیے دعا کی نیت سے۔',
     stepsEn: [
       'Stand in odd rows (typically 3+) facing the Qiblah behind the Imam. Note: there is NO Ruku, NO Sujood, and NO Tashahhud in Janazah.',
       '1st Takbeer ("Allāhu Akbar"): Raise hands to ears and fold them. Recite Sana silently (including "wa jalla thanā’uka"). (Shafi‘i/Hanbali schools recite Surah Al-Fatiha here.)',
@@ -352,7 +353,7 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     stepsEn: [
       'Pray Isha Fard and 2 Rakaat Isha Sunnah first.',
       'Pray Taraweeh in sets of 2 Rakaat each (ending each pair with Tashahhud, Durood, Dua, and Salam). Historically practiced as 8 or 20 Rakaat.',
-      'Rest briefly after every 4 Rakaat (two sets of 2)—this pause ("tarwīḥah") gives Taraweeh its name—making dua, dhikr, or Tasbih.',
+      'Rest briefly after every 4 Rakaat (two sets of 2); this pause ("tarwīḥah") is for dua, dhikr, or Tasbih.',
       'In Ramadan, Witr (3 Rakaat) is also prayed in congregation after Taraweeh.',
     ],
     stepsHi: [
@@ -396,8 +397,8 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     niyyahHi: 'मैं दिल से अल्लाह के लिए 2 रकअत तहज्जुद की नमाज़ पढ़ने की नियत करता/करती हूँ।',
     niyyahUr: 'میں دل سے اللہ تعالیٰ کے لیے 2 رکعت نمازِ تہجد پڑھنے کی نیت کرتا/کرتی ہوں۔',
     stepsEn: [
-      'Pray in calm pairs of 2 Rakaat each—start with 2 light Rakaat, then lengthen your standing, Qur’an recitation, Ruku, and Sujood as comfortable.',
-      'Pour your heart out in Sujood with personal dua, repentance, and gratitude—Allah descends to the lowest heaven in the last third of the night answering callers.',
+      'Pray in pairs of 2 Rakaat; start light, then lengthen standing, Qur’an recitation, Ruku, and Sujood as comfortable.',
+      'Make heartfelt dua, repentance, and gratitude in Sujood during the final third of the night.',
       'If you delayed Witr from Isha, seal your Tahajjud with Witr before true dawn (Fajr).',
     ],
     stepsHi: [
@@ -437,14 +438,14 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
     stepsHi: [
       'पहले 2 रकअत नफ़्ल नमाज़ पढ़ें (चाहें तो पहली रकअत में सूरह काफ़िरून और दूसरी में सूरह इख़लास पढ़ें)।',
       'सलाम फेरने के बाद अल्लाह की हम्द व सना और दुरूद शरीफ़ पढ़कर दुआ-ए-इस्तिख़ारा पढ़ें।',
-      'दुआ में "हाज़ल-अम्र" पर अपने मक़सद का ध्यान करें। इसके बाद अल्लाह पर भरोसा करते हुए नेक मशवरा और अक़्लमंदी से क़दम बढ़ाएँ—ख़्वाब आना ज़रूरी नहीं।',
+      'दुआ में "हाज़ल-अम्र" पर अपने मक़सद का ध्यान करें। इसके बाद अल्लाह पर भरोसा करते हुए नेक मशवरा और अक़्लमंदी से क़दम बढ़ाएँ; ख़्वाब आना ज़रूरी नहीं।',
     ],
     stepsUr: [
       'پہلے 2 رکعت نفل نماز ادا کریں (پہلی رکعت میں سورۂ کافرون اور دوسری میں سورۂ اخلاص پڑھنا مستحسن ہے)۔',
       'سلام پھیرنے کے بعد اللہ کی حمد و ثنا اور درود شریف پڑھ کر مسنون دعائے استخارہ پڑھیں۔',
-      'دعا میں "ھٰذَا الْاَمْر" پر اپنے معاملے کا دھیان کریں، پھر اللہ پر توکل کرتے ہوئے قدم اٹھائیں—خواب آنا ضروری نہیں۔',
+      'دعا میں "ھٰذَا الْاَمْر" پر اپنے معاملے کا دھیان کریں، پھر اللہ پر توکل کرتے ہوئے قدم اٹھائیں؛ خواب آنا ضروری نہیں۔',
     ],
-    note: 'A dream is NOT required for Istikhara—Allah guides through eased doors, clear counsel, and inner peace.',
+    note: 'A dream is not required for Istikhara; Allah guides through eased paths, sound counsel, and inner peace.',
     specialAudio: {
       title: 'Dua-e-Istikhara (Prophetic Guidance Supplication)',
       arabic: 'ٱللَّهُمَّ إِنِّي أَسْتَخِيرُكَ بِعِلْمِكَ، وَأَسْتَقْدِرُكَ بِقُدْرَتِكَ، وَأَسْأَلُكَ مِنْ فَضْلِكَ ٱلْعَظِيمِ، فَإِنَّكَ تَقْدِرُ وَلَا أَقْدِرُ، وَتَعْلَمُ وَلَا أَعْلَمُ، وَأَنْتَ عَلَّامُ ٱلْغُيُوبِ، ٱللَّهُمَّ إِنْ كُنْتَ تَعْلَمُ أَنَّ هَٰذَا ٱلْأَمْرَ خَيْرٌ لِي فِي دِينِي وَمَعَاشِي وَعَاقِبَةِ أَمْرِي فَٱقْدُرْهُ لِي وَيَسِّرْهُ لِي ثُمَّ بَارِكْ لِي فِيهِ، وَإِنْ كُنْتَ تَعْلَمُ أَنَّ هَٰذَا ٱلْأَمْرَ شَرٌّ لِي فِي دِينِي وَمَعَاشِي وَعَاقِبَةِ أَمْرِي فَٱصْرِفْهُ عَنِّي وَٱصْرِفْنِي عَنْهُ وَٱقْدُرْ لِيَ ٱلْخَيْرَ حَيْثُ كَانَ ثُمَّ أَرْضِنِي بِهِ',
@@ -479,12 +480,12 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
       'Salat al-Tawbah (Prayer of Repentance): Whenever slipping into sin, make Wudu, pray 2 Rakaat sincerely, regret the sin, and ask Allah for forgiveness with firm resolve not to return to it.',
     ],
     stepsHi: [
-      'चाश्त (सलातुद-दुहा / इशराक़): सूरज निकलने के लगभग 20 मिनट बाद से ज़वाल से पहले तक 2, 4 या 8 रकअत नफ़्ल 2-2 करके पढ़ें—यह शरीर के हर जोड़ के सदक़े की अदायगी है।',
+      'चाश्त (सलातुद-दुहा / इशराक़): सूरज निकलने के लगभग 20 मिनट बाद से ज़वाल से पहले तक 2, 4 या 8 रकअत नफ़्ल 2-2 करके पढ़ें; यह शरीर के हर जोड़ के सदक़े की अदायगी है।',
       'सलातुल-हाजत: ताज़ा वुज़ू करके 2 रकअत नफ़्ल पढ़ें, फिर अल्लाह की तारीफ़ और दुरूद शरीफ़ पढ़कर अपनी जायज़ हाजत (ज़रूरत) के लिए दुआ करें।',
       'सलातुत-तौबा: किसी गुनाह के बाद सच्चे दिल से वुज़ू कर 2 रकअत नफ़्ल पढ़ें और माफ़ी माँगें, अल्लाह तआला तौबा क़बूल फ़रमाता है।',
     ],
     stepsUr: [
-      'چاشت (صلوٰۃ الضحیٰ / اشراق): طلوعِ آفتاب کے تقریباً 20 منٹ بعد سے زوال سے پہلے تک 2، 4 یا 8 رکعت نفل 2-2 کر کے پڑھیں—یہ جسم کے تمام جوڑوں کا صدقہ ادا کر دیتی ہے۔',
+      'چاشت (صلوٰۃ الضحیٰ / اشراق): طلوعِ آفتاب کے تقریباً 20 منٹ بعد سے زوال سے پہلے تک 2، 4 یا 8 رکعت نفل 2-2 کر کے پڑھیں؛ یہ جسم کے تمام جوڑوں کا صدقہ ادا کر دیتی ہے۔',
       'صلوٰۃ الحاجت: تازہ وضو کر کے 2 رکعت نفل پڑھیں، پھر اللہ کی حمد و ثنا اور درود شریف پڑھ کر اپنی جائز ضرورت کے لیے دعا مانگیں۔',
       'صلوٰۃ التوبہ: کسی خطا کے بعد سچے دل سے وضو کر کے 2 رکعت نفل پڑھیں اور استغفار کریں، اللہ تعالیٰ توبہ قبول فرمانے والا ہے۔',
     ],
@@ -492,7 +493,29 @@ export const PRAYER_GUIDES: PrayerGuideItem[] = [
   },
 ];
 
-export const SALAH_POSTURE_STEPS: SalahPostureStep[] = [
+export const PRAYER_GUIDES: PrayerGuideItem[] = BASE_PRAYER_GUIDES.map((guide) => {
+  const niyyahTuples = !guide.niyyahWordTimings
+    ? SALAH_WORD_TIMINGS[`${guide.id}-niyyah`]
+    : undefined;
+  const specialTuples =
+    guide.specialAudio && !guide.specialAudio.wordTimings
+      ? SALAH_WORD_TIMINGS[`${guide.id}-special`]
+      : undefined;
+  return {
+    ...guide,
+    ...(niyyahTuples ? { niyyahWordTimings: expandWordTimings(niyyahTuples) } : {}),
+    ...(guide.specialAudio && specialTuples
+      ? {
+          specialAudio: {
+            ...guide.specialAudio,
+            wordTimings: expandWordTimings(specialTuples),
+          },
+        }
+      : {}),
+  };
+});
+
+const BASE_SALAH_POSTURE_STEPS: SalahPostureStep[] = [
   {
     id: 'step-takbeer',
     stepNumber: 1,
@@ -531,11 +554,12 @@ export const SALAH_POSTURE_STEPS: SalahPostureStep[] = [
     repeatLabel: 'Every Rakaat',
     arabic: 'بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ ۝١ ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ ۝٢ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ ۝٣ مَـٰلِكِ يَوْمِ ٱلدِّينِ ۝٤ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝٥ ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ ۝٦ صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ ۝٧',
     transliteration: 'Bismillāhir-Raḥmānir-Raḥīm. Al-ḥamdu lillāhi Rabbil-‘ālamīn. Ar-Raḥmānir-Raḥīm. Māliki yawmid-dīn. Iyyāka na‘budu wa iyyāka nasta‘īn. Ihdinaṣ-ṣirāṭal-mustaqīm. Ṣirāṭal-ladhīna an‘amta ‘alayhim ghayril-maghḍūbi ‘alayhim wa laḍ-ḍāllīn (Āmīn).',
-    translationEn: 'In the Name of Allah, the Most Compassionate, Most Merciful. All praise is for Allah—Lord of all worlds, the Most Compassionate, Most Merciful, Master of the Day of Judgment. You alone we worship and You alone we ask for help. Guide us along the Straight Path—the Path of those You have blessed, not those who incurred wrath nor those astray.',
-    translationHi: 'शुरू अल्लाह के नाम से जो बड़ा मेहरबान निहायत रहम वाला है। सब तारीफ़ अल्लाह के लिए है जो तमाम जहानों का रब है, बड़ा मेहरबान निहायत रहम वाला, बदले के दिन का मालिक। हम तेरी ही इबादत करते हैं और तुझ ही से मदद माँगते हैं। हमें सीधा रास्ता दिखा—उन लोगों का रास्ता जिन पर तूने इनाम फ़रमाया, न कि उन लोगों का जिन पर ग़ज़ब हुआ और न भटके हुओं का।',
-    translationUr: 'شروع اللہ کے نام سے جو نہایت مہربان، بڑا رحم فرمانے والا ہے۔ تمام تعریفیں اللہ کے لیے ہیں جو تمام جہانوں کا رب ہے، بڑا مہربان نہایت رحم والا، بدلے کے دن کا مالک۔ ہم تیری ہی عبادت کرتے ہیں اور تجھ ہی سے مدد مانگتے ہیں۔ ہمیں سیدھے راستے کی ہدایت فرما—ان لوگوں کا راستہ جن پر تو نے انعام فرمایا، نہ کہ ان کا جن پر غضب ہوا اور نہ گمراہوں کا۔',
-    note: 'Followed by another short Surah (such as Al-Ikhlas) in the first 2 Rakaat of Fard and in all Rakaat of Sunnah/Nafl/Witr. Tap "In Reader" to practice all 7 verses word by word.',
-    quranRef: { surahId: 1, ayahNumber: 2 },
+    translationEn: 'In the Name of Allah, the Most Compassionate, Most Merciful. All praise is for Allah, Lord of all worlds, the Most Compassionate, Most Merciful, Master of the Day of Judgment. You alone we worship and You alone we ask for help. Guide us along the Straight Path, the Path of those You have blessed, not those who incurred wrath nor those astray.',
+    translationHi: 'शुरू अल्लाह के नाम से जो बड़ा मेहरबान निहायत रहम वाला है। सब तारीफ़ अल्लाह के लिए है जो तमाम जहानों का रब है, बड़ा मेहरबान निहायत रहम वाला, बदले के दिन का मालिक। हम तेरी ही इबादत करते हैं और तुझ ही से मदद माँगते हैं। हमें सीधा रास्ता दिखा, उन लोगों का रास्ता जिन पर तूने इनाम फ़रमाया, न कि उन लोगों का जिन पर ग़ज़ब हुआ और न भटके हुओं का।',
+    translationUr: 'شروع اللہ کے نام سے جو نہایت مہربان، بڑا رحم فرمانے والا ہے۔ تمام تعریفیں اللہ کے لیے ہیں جو تمام جہانوں کا رب ہے، بڑا مہربان نہایت رحم والا، بدلے کے دن کا مالک۔ ہم تیری ہی عبادت کرتے ہیں اور تجھ ہی سے مدد مانگتے ہیں۔ ہمیں سیدھے راستے کی ہدایت فرما، ان لوگوں کا راستہ جن پر تو نے انعام فرمایا، نہ کہ ان کا جن پر غضب ہوا اور نہ گمراہوں کا۔',
+    note: 'Followed by another short Surah (such as Al-Ikhlas) in the first 2 Rakaat of Fard and in all Rakaat of Sunnah/Nafl/Witr. Tap "Al-Fatiha in Reader" to practice all 7 verses word by word.',
+    quranRef: { surahId: 1, ayahNumber: 1 },
+    quranRange: { surahId: 1, startAyah: 1, endAyah: 7 },
   },
   {
     id: 'step-ruku',
@@ -674,7 +698,13 @@ export const SALAH_POSTURE_STEPS: SalahPostureStep[] = [
   },
 ];
 
-export const WUDU_STEPS: WuduStep[] = [
+export const SALAH_POSTURE_STEPS: SalahPostureStep[] = BASE_SALAH_POSTURE_STEPS.map((step) => {
+  if (step.wordTimings) return step;
+  const tuples = SALAH_WORD_TIMINGS[step.id];
+  return tuples ? { ...step, wordTimings: expandWordTimings(tuples) } : step;
+});
+
+const BASE_WUDU_STEPS: WuduStep[] = [
   {
     stepNumber: 1,
     title: 'Intention, Bismillah & Washing Hands',
@@ -723,3 +753,9 @@ export const WUDU_STEPS: WuduStep[] = [
     audioUrl: 'https://www.hisnmuslim.com/audio/ar/13.mp3',
   },
 ];
+
+export const WUDU_STEPS: WuduStep[] = BASE_WUDU_STEPS.map((step) => {
+  if (step.wordTimings) return step;
+  const tuples = SALAH_WORD_TIMINGS[`wudu-${step.stepNumber}`];
+  return tuples ? { ...step, wordTimings: expandWordTimings(tuples) } : step;
+});

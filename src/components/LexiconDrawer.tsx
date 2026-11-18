@@ -91,6 +91,9 @@ export const LexiconDrawerContent: React.FC<
     ttsSessionRef.current += 1;
     ttsAbortRef.current?.abort();
     ttsAbortRef.current = null;
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
     if (ttsAudioRef.current && !ttsAudioRef.current.paused) {
       ttsAudioRef.current.pause();
     }
@@ -147,6 +150,39 @@ export const LexiconDrawerContent: React.FC<
     setTimeout(() => setSavedNotice(false), 1800);
   };
 
+  const trySpeechFallback = (arabicText: string): boolean => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return false;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const voices = window.speechSynthesis.getVoices();
+      const arabicVoice =
+        voices.find((v) => v.lang.toLowerCase().startsWith('ar')) ?? null;
+      const utter = new SpeechSynthesisUtterance(
+        arabicText.replace(/\u0671/g, '\u0627').replace(/[\u06D6-\u06ED]/g, '')
+      );
+      utter.lang = arabicVoice?.lang || 'ar-SA';
+      if (arabicVoice) utter.voice = arabicVoice;
+      utter.rate = 0.85;
+      utter.onend = () => {
+        setIsTtsPlaying(false);
+        setIsTtsBuffering(false);
+      };
+      utter.onerror = () => {
+        setIsTtsPlaying(false);
+        setIsTtsBuffering(false);
+        setTtsError('Qari Voice playback is unavailable right now.');
+      };
+      setIsTtsBuffering(false);
+      setIsTtsPlaying(true);
+      window.speechSynthesis.speak(utter);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleToggleTts = async (
     key: string,
     arabicText: string,
@@ -180,8 +216,10 @@ export const LexiconDrawerContent: React.FC<
       setIsTtsBuffering(false);
       setIsTtsPlaying(true);
       audio.play().catch(() => {
-        setIsTtsPlaying(false);
-        setTtsError('Qari Voice playback is unavailable right now.');
+        if (!trySpeechFallback(arabicText)) {
+          setIsTtsPlaying(false);
+          setTtsError('Qari Voice playback is unavailable right now.');
+        }
       });
       return;
     }
@@ -206,8 +244,10 @@ export const LexiconDrawerContent: React.FC<
       if (ctrl.signal.aborted || ttsSessionRef.current !== session) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setIsTtsBuffering(false);
-      setIsTtsPlaying(false);
-      setTtsError('Qari Voice playback is unavailable right now.');
+      if (!trySpeechFallback(arabicText)) {
+        setIsTtsPlaying(false);
+        setTtsError('Qari Voice playback is unavailable right now.');
+      }
     }
   };
 

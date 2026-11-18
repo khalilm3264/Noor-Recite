@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Bookmark, BookOpenText, ChevronDown, ChevronUp, Pause, Play } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Bookmark, BookOpenText, Check, ChevronDown, ChevronUp, Copy, Pause, Play } from 'lucide-react';
 import { Ayah, ReaderSettings, TranslationLanguage, WordToken } from '../types/quran';
 import { TAJWEED_STYLE_MAP } from '../data/tajweedRules';
 import { getWordDisplayArabic } from '../data/qiraatData';
 import { getAyahFootnotes } from '../data/wordFootnotes';
+import { copyTextToClipboard, formatAyahClipboardText } from '../utils/clipboard';
 import {
   getAyahTranslationSegments,
   getAyahTranslationText,
   getTranslationTextClass,
   getWordMeaningText,
+  hasLocalizedWordMeaning,
   isRtlTranslationLang,
+  resolveEffectiveSyncedWordIndex,
 } from '../utils/translationConfig';
+import { joinTranslationTokens, tokenizeTranslationForAlignment } from '../data/quranData';
 import { RubElHizbBadge } from './RubElHizbIcon';
 
 interface AyahCardProps {
@@ -40,22 +44,25 @@ function buildTranslationSpans(
   words: WordToken[],
   lang: TranslationLanguage = 'en'
 ): string[] {
-  const tokens = translation.trim().split(/\s+/).filter(Boolean);
+  const tokens = tokenizeTranslationForAlignment(translation, lang);
   if (words.length === 0 || tokens.length === 0) {
     return [translation];
   }
   if (words.length === 1) {
-    return [translation];
+    return [joinTranslationTokens(tokens, lang)];
   }
 
-  // Weight each Arabic word by its localized gloss word count so phrasing aligns naturally
+  // Weight each Arabic word by its localized gloss word count (or Arabic length when unglossed)
   const weights = words.map((w) => {
+    if (!hasLocalizedWordMeaning(w, lang)) {
+      return Math.max(1, w.arabic.replace(/[\u064B-\u065F\u0670]/g, '').length);
+    }
     const rawGloss = getWordMeaningText(w, lang);
     const cleanMeaning = (rawGloss || '').replace(/\//g, ' ').trim();
     if (!cleanMeaning || cleanMeaning.startsWith('Tap Ayah')) {
       return Math.max(1, w.arabic.length);
     }
-    return Math.max(1, cleanMeaning.split(/\s+/).filter(Boolean).length);
+    return Math.max(1, tokenizeTranslationForAlignment(cleanMeaning, lang).length);
   });
 
   const totalWeight = weights.reduce((sum, val) => sum + val, 0);
@@ -72,7 +79,7 @@ function buildTranslationSpans(
             tokens.length,
             Math.max(cursor, Math.round((cumulativeWeight / totalWeight) * tokens.length))
           );
-    spans.push(tokens.slice(cursor, targetEnd).join(' '));
+    spans.push(joinTranslationTokens(tokens.slice(cursor, targetEnd), lang));
     cursor = targetEnd;
   }
 
@@ -95,10 +102,34 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
   const [focusedFootnoteNum, setFocusedFootnoteNum] = useState<number | null>(null);
   const [localExpandOverride, setLocalExpandOverride] = useState<boolean | null>(null);
   const [showTafsir, setShowTafsir] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setLocalExpandOverride(null);
   }, [settings.alwaysShowFootnotes]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyAyah = async () => {
+    const payload = formatAyahClipboardText(ayah, settings);
+    const ok = await copyTextToClipboard(payload);
+    if (!ok) return;
+    setCopied(true);
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = null;
+    }, 2000);
+  };
 
   const highlightStyle = settings.highlightStyle ?? 'pill';
   const activeWordClasses =
@@ -156,6 +187,11 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
     ayah,
   ]);
 
+  const effectiveTranslationWordIdx = useMemo(
+    () => resolveEffectiveSyncedWordIndex(syncedIndex, resolvedTranslationSegments),
+    [syncedIndex, resolvedTranslationSegments]
+  );
+
   // Place each footnote superscript once on the final segment mapped to that word
   const lastSegmentIdxForWord = useMemo(() => {
     const map = new Map<number, number>();
@@ -205,6 +241,30 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
           >
             <BookOpenText className="w-4 h-4" />
             <span className="hidden sm:inline">Lexicon</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleCopyAyah()}
+            aria-label={copied ? `Copied verse ${ayah.verseKey}` : `Copy verse ${ayah.verseKey} to clipboard`}
+            title={copied ? 'Copied!' : 'Copy Arabic & translation'}
+            className={`min-h-[40px] px-2.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+              copied
+                ? 'text-[#064E3B] bg-[#064E3B]/10 dark:text-emerald-300 dark:bg-emerald-400/15'
+                : 'text-[#404944] hover:text-[#064E3B] hover:bg-[#064E3B]/6 dark:text-emerald-200/75 dark:hover:text-emerald-200 dark:hover:bg-emerald-400/10'
+            }`}
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Copy</span>
+              </>
+            )}
           </button>
 
           <button
@@ -357,8 +417,10 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
             >
               {resolvedTranslationSegments.map((seg, segIdx) => {
                 const word = ayah.words[seg.wordIndex];
-                const isSynced = syncedIndex === seg.wordIndex;
-                const isPast = syncedIndex !== null && seg.wordIndex < syncedIndex;
+                const isSynced = effectiveTranslationWordIdx === seg.wordIndex;
+                const isPast =
+                  effectiveTranslationWordIdx !== null &&
+                  seg.wordIndex < effectiveTranslationWordIdx;
                 const fnItem = footnoteByWordIndex.get(seg.wordIndex);
                 const showSuperscript =
                   Boolean(fnItem) &&
@@ -381,7 +443,7 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
                           onSelectWord(ayah, word, seg.wordIndex);
                         }
                       }}
-                      className={`rounded px-0.5 py-0.5 ${
+                      className={`rounded ${displayedLang === 'zh' && !isSynced ? 'px-0' : 'px-0.5'} py-0.5 ${
                         word ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]' : ''
                       } ${
                         isSynced
@@ -416,7 +478,10 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
                         {fnItem.number}
                       </button>
                     )}
-                    {segIdx < resolvedTranslationSegments.length - 1 ? ' ' : ''}
+                    {segIdx < resolvedTranslationSegments.length - 1 &&
+                    displayedLang !== 'zh'
+                      ? ' '
+                      : ''}
                   </React.Fragment>
                 );
               })}

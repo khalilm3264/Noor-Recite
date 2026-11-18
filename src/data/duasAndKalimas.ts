@@ -1,6 +1,10 @@
 import { DuaOrKalimaItem } from '../types/quran';
+import { ALTERNATES_BY_DUA_ID } from './duasPartAlternates';
+import { EXTRA_DAILY_QURANIC_ADHKAR_DUAS } from './duasPartDailyAndAdhkar';
+import { RARE_AND_NATURE_DUAS } from './duasPartRareAndNature';
+import { DUA_WORD_TIMINGS, expandWordTimings } from './duaWordTimings';
 
-export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
+const BASE_DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
   // ==================== THE SIX KALIMAS ====================
   {
     id: 'kalima-1',
@@ -210,15 +214,32 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     badge: 'Travelling',
     title: 'Journey Supplication',
     subtitle: 'When boarding a vehicle or starting travel',
-    arabic: 'سُبْحَانَ ٱلَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ وَإِنَّا إِلَىٰ رَبِّنَا لَمُنقَلِبُونَ',
+    arabic: 'سُبْحَانَ ٱلَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ ۝١٣ وَإِنَّا إِلَىٰ رَبِّنَا لَمُنقَلِبُونَ ۝١٤',
     transliteration: 'Subḥānalladhī sakhkhara lanā hādhā wa mā kunnā lahū muqrinīn, wa innā ilā Rabbinā lamunqalibūn',
     translationEn: 'Glory be to Him who has subjected this to us, though we could never have controlled it ourselves, and indeed to our Lord we will surely return.',
     translationHi: 'पाक है वह ज़ात जिसने इस सवारी को हमारे क़ाबू में कर दिया जबकि हम इसे क़ाबू करने की ताक़त नहीं रखते थे, और यक़ीनन हमें अपने रब की तरफ़ लौट कर जाना है।',
     translationUr: 'پاک ہے وہ ذات جس نے اس سواری کو ہمارے بس میں کر دیا حالانکہ ہم اسے قابو کرنے کی طاقت نہ رکھتے تھے، اور بے شک ہمیں اپنے رب کی طرف لوٹ کر جانا ہے۔',
     reference: 'Qur’an 43:13–14 · Sahih Muslim',
     note: 'Turns every journey into a mindful reminder of Allah’s favor.',
+    audioUrl: '/audio/qari/dua-travel.mp3',
     fallbackAudioUrl: 'https://www.hisnmuslim.com/audio/ar/206.mp3',
     quranRef: { surahId: 43, ayahNumber: 13 },
+    quranRange: { surahId: 43, startAyah: 13, endAyah: 14 },
+    wordTimings: [
+      { startMs: 0, endMs: 960 },
+      { startMs: 960, endMs: 1850 },
+      { startMs: 1850, endMs: 2740 },
+      { startMs: 2740, endMs: 3450 },
+      { startMs: 3450, endMs: 4240 },
+      { startMs: 4240, endMs: 4900 },
+      { startMs: 4900, endMs: 6500 },
+      { startMs: 6500, endMs: 7080 },
+      { startMs: 7080, endMs: 9865 },
+      { startMs: 9978, endMs: 13458 },
+      { startMs: 13458, endMs: 13968 },
+      { startMs: 13968, endMs: 14878 },
+      { startMs: 14878, endMs: 19543 },
+    ],
   },
 
   // ==================== QUR'ANIC DUAS ====================
@@ -235,7 +256,21 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationUr: 'اے ہمارے رب! ہمیں دنیا میں بھی بھلائی عطا فرما اور آخرت میں بھی بھلائی عطا فرما، اور ہمیں آگ کے عذاب سے بچا لے۔',
     reference: 'Surah Al-Baqarah 2:201 · Bukhari & Muslim',
     note: 'Captures wellbeing, purpose, and safety across both this life and the next.',
+    audioUrl: '/audio/qari/dua-rabbana-good.mp3',
     quranRef: { surahId: 2, ayahNumber: 201 },
+    wordTimings: [
+      { startMs: 0, endMs: 2180 },
+      { startMs: 2180, endMs: 3060 },
+      { startMs: 3060, endMs: 3270 },
+      { startMs: 3270, endMs: 4110 },
+      { startMs: 4110, endMs: 5220 },
+      { startMs: 5220, endMs: 5970 },
+      { startMs: 5970, endMs: 7030 },
+      { startMs: 7030, endMs: 8190 },
+      { startMs: 8190, endMs: 9160 },
+      { startMs: 9160, endMs: 9990 },
+      { startMs: 9990, endMs: 12745 },
+    ],
   },
   {
     id: 'dua-parents',
@@ -250,7 +285,15 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationUr: 'اے میرے رب! ان دونوں پر رحم فرما جیسا کہ انہوں نے بچپن میں میری پرورش کی۔',
     reference: 'Surah Al-Isra 17:24',
     note: 'A short verse of enduring tenderness for living or departed parents.',
+    audioUrl: '/audio/qari/dua-parents.mp3',
     quranRef: { surahId: 17, ayahNumber: 24 },
+    wordTimings: [
+      { startMs: 145, endMs: 905 },
+      { startMs: 905, endMs: 2195 },
+      { startMs: 2195, endMs: 2925 },
+      { startMs: 2925, endMs: 4345 },
+      { startMs: 4345, endMs: 6070 },
+    ],
   },
   {
     id: 'dua-knowledge',
@@ -265,7 +308,13 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationUr: 'اے میرے رب! میرے علم میں اضافہ فرما۔',
     reference: 'Surah Taha 20:114',
     note: 'The only increase the Prophet ﷺ was explicitly commanded in the Qur’an to ask for.',
+    audioUrl: '/audio/qari/dua-knowledge.mp3',
     quranRef: { surahId: 20, ayahNumber: 114 },
+    wordTimings: [
+      { startMs: 125, endMs: 1085 },
+      { startMs: 1085, endMs: 2125 },
+      { startMs: 2125, endMs: 3900 },
+    ],
   },
   {
     id: 'dua-yunus-distress',
@@ -280,7 +329,19 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationUr: 'تیرے سوا کوئی معبود نہیں، تو پاک ہے، بے شک میں ہی قصورواروں میں سے تھا۔',
     reference: 'Surah Al-Anbiya 21:87 · Tirmidhi 3505',
     note: 'Unites pure praise of Allah with honest self-reflection.',
+    audioUrl: '/audio/qari/dua-yunus-distress.mp3',
     quranRef: { surahId: 21, ayahNumber: 87 },
+    wordTimings: [
+      { startMs: 45, endMs: 2155 },
+      { startMs: 2155, endMs: 2935 },
+      { startMs: 2935, endMs: 5005 },
+      { startMs: 5005, endMs: 6255 },
+      { startMs: 6255, endMs: 7545 },
+      { startMs: 7545, endMs: 8765 },
+      { startMs: 8765, endMs: 10125 },
+      { startMs: 10125, endMs: 10425 },
+      { startMs: 10425, endMs: 13100 },
+    ],
   },
   {
     id: 'dua-steadfast-heart',
@@ -310,7 +371,21 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationUr: 'اے ہمارے رب! ہمیں ہماری بیویوں اور اولاد کی طرف سے آنکھوں کی ٹھنڈک عطا فرما اور ہمیں پرہیزگاروں کا پیشوا بنا۔',
     reference: 'Surah Al-Furqan 25:74',
     note: 'Asks for households marked by warmth, integrity, and quiet example.',
+    audioUrl: '/audio/qari/dua-family.mp3',
     quranRef: { surahId: 25, ayahNumber: 74 },
+    wordTimings: [
+      { startMs: 15, endMs: 1265 },
+      { startMs: 1265, endMs: 1555 },
+      { startMs: 1555, endMs: 2465 },
+      { startMs: 2465, endMs: 2885 },
+      { startMs: 2885, endMs: 4465 },
+      { startMs: 4465, endMs: 6925 },
+      { startMs: 6925, endMs: 7925 },
+      { startMs: 7925, endMs: 9625 },
+      { startMs: 9625, endMs: 10975 },
+      { startMs: 10975, endMs: 12725 },
+      { startMs: 12725, endMs: 14560 },
+    ],
   },
   {
     id: 'ayatul-kursi',
@@ -320,7 +395,7 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     subtitle: 'The Verse of the Throne · Protection after prayer & before sleep',
     arabic: 'ٱللَّهُ لَآ إِلَـٰهَ إِلَّا هُوَ ٱلْحَىُّ ٱلْقَيُّومُ ۚ لَا تَأْخُذُهُۥ سِنَةٌ وَلَا نَوْمٌ ۚ لَّهُۥ مَا فِى ٱلسَّمَـٰوَٰتِ وَمَا فِى ٱلْأَرْضِ ۗ مَن ذَا ٱلَّذِى يَشْفَعُ عِندَهُۥٓ إِلَّا بِإِذْنِهِۦ ۚ يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ ۖ وَلَا يُحِيطُونَ بِشَىْءٍ مِّنْ عِلْمِهِۦٓ إِلَّا بِمَا شَآءَ ۚ وَسِعَ كُرْسِيُّهُ ٱلسَّمَـٰوَٰتِ وَٱلْأَرْضَ ۖ وَلَا يَـُٔودُهُۥ حِفْظُهُمَا ۚ وَهُوَ ٱلْعَلِىُّ ٱلْعَظِيمُ',
     transliteration: 'Allāhu lā ilāha illā Huwal-Ḥayyul-Qayyūm, lā ta’khudhuhū sinatun wa lā nawm, lahū mā fis-samāwāti wa mā fil-arḍ, man dhalladhī yashfa‘u ‘indahū illā bi-idhnih, ya‘lamu mā bayna aydīhim wa mā khalfahum, wa lā yuḥīṭūna bishay’in min ‘ilmihī illā bimā shā’, wasi‘a kursiyyuhus-samāwāti wal-arḍ, wa lā ya’ūduhū ḥifẓuhumā, wa Huwal-‘Aliyyul-‘Aẓīm',
-    translationEn: 'Allah — there is no deity except Him, the Ever-Living, the Sustainer of all existence. Neither drowsiness overtakes Him nor sleep. To Him belongs whatever is in the heavens and whatever is on the earth. Who is it that can intercede with Him except by His permission? He knows what is before them and what will be after them, and they encompass not a thing of His knowledge except for what He wills. His Kursi extends over the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.',
+    translationEn: 'Allah, there is no deity except Him, the Ever-Living, the Sustainer of all existence. Neither drowsiness overtakes Him nor sleep. To Him belongs whatever is in the heavens and whatever is on the earth. Who is it that can intercede with Him except by His permission? He knows what is before them and what will be after them, and they encompass not a thing of His knowledge except for what He wills. His Kursi extends over the heavens and the earth, and their preservation tires Him not. And He is the Most High, the Most Great.',
     translationHi: 'अल्लाह वह है जिसके सिवा कोई माबूद नहीं, वह ज़िंदा है और सबका थामने वाला है। उसे न ऊँघ आती है और न नींद। आसमानों और ज़मीन में जो कुछ है सब उसी का है। कौन है जो उसकी इजाज़त के बिना उसके पास सिफ़ारिश कर सके? वह जानता है जो कुछ उनके सामने है और जो कुछ उनके पीछे है, और वे उसके इल्म में से किसी चीज़ पर क़ाबू नहीं पा सकते सिवाय उसके जो वह चाहे। उसकी कुर्सी आसमानों और ज़मीन को घेरे हुए है, और उन दोनों की हिफ़ाज़त उसे थकाती नहीं, और वह सबसे बुलंद व अज़ीम है।',
     translationUr: 'اللہ وہ ہے جس کے سوا کوئی معبود نہیں، وہ زندہ ہے اور سب کا تھامنے والا ہے۔ اسے نہ اونگھ آتی ہے نہ نیند۔ آسمانوں اور زمین میں جو کچھ ہے سب اسی کا ہے۔ کون ہے جو اس کی اجازت کے بغیر اس کے حضور سفارش کر سکے؟ وہ جانتا ہے جو کچھ ان کے سامنے ہے اور جو ان کے پیچھے ہے، اور وہ اس کے علم میں سے کسی چیز کا احاطہ نہیں کر سکتے مگر جتنا وہ چاہے۔ اس کی کرسی آسمانوں اور زمین پر حاوی ہے، اور ان دونوں کی حفاظت اسے ذرا بھی نہیں تھکاتی، اور وہی بلند و عظیم ہے۔',
     reference: 'Surah Al-Baqarah 2:255 · Sahih Bukhari & Muslim',
@@ -480,7 +555,35 @@ export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
     translationHi: 'पाक है वह ज़ात जो ज़मीन व आसमान की बादशाही का मालिक है, पाक है इज़्ज़त, अज़मत, हैबत, क़ुदरत, बुज़ुर्गी और जब्रूत वाला। पाक है वह ज़िंदा बादशाह जिसे न नींद आती है न मौत। निहायत पाक व मुक़द्दस है हमारा रब और फ़रिश्तों व रूह (जिब्रील) का रब। ऐ अल्लाह! हमें आग से पनाह दे, ऐ पनाह देने वाले, ऐ पनाह देने वाले, ऐ पनाह देने वाले।',
     translationUr: 'پاک ہے وہ ذات جو ملک و ملکوت (زمین و آسمان کی بادشاہی) کا مالک ہے، پاک ہے عزت، عظمت، ہیبت، قدرت، کبریائی اور جبروت والا۔ پاک ہے وہ زندہ بادشاہ جو نہ سوتا ہے نہ مرتا ہے۔ نہایت پاک و مقدس ہے ہمارا رب اور فرشتوں اور روح (جبریل) کا رب۔ اے اللہ! ہمیں آگ سے پناہ عطا فرما، اے پناہ دینے والے، اے پناہ دینے والے، اے پناہ دینے والے۔',
     reference: 'Traditional Ramadan Taraweeh Tarwīḥah Dhikr (Sahih Muslim 487 core Tasbih)',
-    note: 'Recited calmly during the short pause (tarwīḥah) after every four Rakaat of Taraweeh prayer—recommended 5 times across 20 Rakaat.',
+    note: 'Recited during the short rest pause (tarwīḥah) after every four Rakaat of Taraweeh prayer, up to 5 times across 20 Rakaat.',
     recommendedCount: 5,
   },
 ];
+
+const RAW_DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
+  ...BASE_DUAS_AND_KALIMAS.map((item) => {
+    const bundle = ALTERNATES_BY_DUA_ID[item.id];
+    if (!bundle) return item;
+    return {
+      ...item,
+      primaryVariantLabel: bundle.primaryVariantLabel ?? item.primaryVariantLabel,
+      alternates: bundle.alternates,
+    };
+  }),
+  ...EXTRA_DAILY_QURANIC_ADHKAR_DUAS,
+  ...RARE_AND_NATURE_DUAS,
+];
+
+export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = RAW_DUAS_AND_KALIMAS.map((item) => {
+  const primaryTuples = !item.wordTimings ? DUA_WORD_TIMINGS[item.id] : undefined;
+  const hydratedAlternates = item.alternates?.map((alt) => {
+    if (alt.wordTimings) return alt;
+    const altTuples = DUA_WORD_TIMINGS[`${item.id}#${alt.id}`];
+    return altTuples ? { ...alt, wordTimings: expandWordTimings(altTuples) } : alt;
+  });
+  return {
+    ...item,
+    ...(primaryTuples ? { wordTimings: expandWordTimings(primaryTuples) } : {}),
+    ...(hydratedAlternates ? { alternates: hydratedAlternates } : {}),
+  };
+});

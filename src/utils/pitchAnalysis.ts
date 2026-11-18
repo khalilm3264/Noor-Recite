@@ -290,7 +290,7 @@ export function evaluateTartilRecitation(
       );
     }
   } else {
-    // Offline fallback without transcript: still strict — cap at 74 when unverified
+    // Offline fallback without transcript: still strict; cap at 74 when unverified
     overallScore = isTooQuiet
       ? clampScore((pitchScore + makhrajScore + maddScore + breathScore) / 4, 0, 22)
       : clampScore(

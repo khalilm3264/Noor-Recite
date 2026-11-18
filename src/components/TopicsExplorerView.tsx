@@ -26,14 +26,15 @@ import {
   TopicAyahEntry,
 } from '../data/topicsData';
 import { getEveryAyahUrl } from '../data/quranData';
-import { getAiTtsAudioUrl, QARI_TTS_STYLES, unlockAudioElement } from '../utils/aiTts';
 import { FiligreeDivider, RubElHizbBadge } from './RubElHizbIcon';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { scrollTargetIntoCenter } from '../utils/useSmoothReadingPlayback';
 
 interface TopicsExplorerViewProps {
   reciter: Reciter;
   translationLanguage: TranslationLanguage;
+  autoplayQueue?: boolean;
   onPracticeInReader: (surahId: number, ayahNumber: number, autoPlay?: boolean) => void;
   onPauseReaderAudio?: () => void;
   onAddTopicToHifzQueue: (topic: QuranTopicCollection) => number;
@@ -51,6 +52,7 @@ const TOPIC_CATEGORIES = [
 export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
   reciter,
   translationLanguage,
+  autoplayQueue = true,
   onPracticeInReader,
   onPauseReaderAudio,
   onAddTopicToHifzQueue,
@@ -66,11 +68,14 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
   // Continuous Qari Topic Playlist state
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const activeEntryRef = useRef<TopicAyahEntry | null>(null);
+  const continuousRef = useRef(false);
+  const activeEntryIdRef = useRef<string | null>(null);
+  const detailAyahsRef = useRef<TopicAyahEntry[]>([]);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const qariFallbackAttemptedRef = useRef<Set<string>>(new Set());
   const [playingEntryId, setPlayingEntryId] = useState<string | null>(null);
   const [isBufferingEntryId, setIsBufferingEntryId] = useState<string | null>(null);
-  const [isContinuousPlay, setIsContinuousPlay] = useState(false);
+  const [, setIsContinuousPlay] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const selectedTopic = useMemo(
@@ -123,6 +128,8 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
     return selectedTopic.ayahs.filter((a) => a.subCategory === activeSubFilter);
   }, [selectedTopic, activeSubFilter]);
 
+  detailAyahsRef.current = detailAyahs;
+
   useEffect(() => {
     setActiveSubFilter('All');
     setHifzSyncMsg(null);
@@ -132,10 +139,23 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    activeEntryIdRef.current = null;
+    continuousRef.current = false;
     setPlayingEntryId(null);
     setIsBufferingEntryId(null);
     setIsContinuousPlay(false);
   }, [selectedTopicId]);
+
+  useEffect(() => {
+    if (!playingEntryId) return;
+    const runScroll = () => scrollTargetIntoCenter(`topic-ayah-${playingEntryId}`);
+    const raf = window.requestAnimationFrame(runScroll);
+    const timer = window.setTimeout(runScroll, 120);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [playingEntryId]);
 
   useEffect(() => {
     return () => {
@@ -152,39 +172,58 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
       setPlayingEntryId(null);
       setIsBufferingEntryId(null);
       setIsContinuousPlay(false);
-      setAudioError('Unable to stream Qari audio clip right now.');
+      setAudioError('Unable to stream recitation clip right now.');
       return;
     }
 
     qariFallbackAttemptedRef.current.add(entry.id);
     ttsAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    ttsAbortRef.current = ctrl;
-    unlockAudioElement(audio);
     setIsBufferingEntryId(entry.id);
 
+    const backupFolder =
+      reciter.everyAyahFolder === 'Husary_128kbps'
+        ? 'Alafasy_128kbps'
+        : 'Husary_128kbps';
+    const backupUrl = getEveryAyahUrl(backupFolder, entry.surahId, entry.ayahNumber);
+
     try {
-      const blobUrl = await getAiTtsAudioUrl(entry.arabic, {
-        voiceName: 'Charon',
-        style: QARI_TTS_STYLES.tafsir,
-        signal: ctrl.signal,
-      });
-      if (ctrl.signal.aborted) return;
-      audio.src = blobUrl;
+      audio.src = backupUrl;
       audio.load();
       await audio.play();
       setIsBufferingEntryId(null);
     } catch (err) {
-      if (ctrl.signal.aborted) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setIsBufferingEntryId(null);
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const voices = window.speechSynthesis.getVoices();
+          const arabicVoice =
+            voices.find((v) => v.lang.toLowerCase().startsWith('ar')) ?? null;
+          const utter = new SpeechSynthesisUtterance(entry.arabic);
+          utter.lang = arabicVoice?.lang || 'ar-SA';
+          if (arabicVoice) utter.voice = arabicVoice;
+          utter.onend = () => handleAudioEnded();
+          utter.onerror = () => {
+            setPlayingEntryId(null);
+            setIsContinuousPlay(false);
+            setAudioError('Unable to play recitation clip right now.');
+          };
+          window.speechSynthesis.speak(utter);
+          return;
+        } catch {
+          // Fall through to error message
+        }
+      }
       setPlayingEntryId(null);
+      activeEntryIdRef.current = null;
+      continuousRef.current = false;
       setIsContinuousPlay(false);
-      setAudioError('Unable to stream Qari audio clip right now.');
+      setAudioError('Unable to play recitation clip right now.');
     }
   };
 
-  const playEntry = (entry: TopicAyahEntry, continuous = false) => {
+  const playEntry = (entry: TopicAyahEntry, continuous = autoplayQueue) => {
     setAudioError(null);
     const audio = audioRef.current;
     if (!audio) return;
@@ -192,6 +231,8 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
     if (playingEntryId === entry.id && !audio.paused) {
       ttsAbortRef.current?.abort();
       audio.pause();
+      activeEntryIdRef.current = null;
+      continuousRef.current = false;
       setPlayingEntryId(null);
       setIsBufferingEntryId(null);
       setIsContinuousPlay(false);
@@ -202,6 +243,8 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
     ttsAbortRef.current?.abort();
     qariFallbackAttemptedRef.current.delete(entry.id);
     activeEntryRef.current = entry;
+    activeEntryIdRef.current = entry.id;
+    continuousRef.current = continuous;
 
     const url = getEveryAyahUrl(reciter.everyAyahFolder, entry.surahId, entry.ayahNumber);
     if (audio.src !== url) {
@@ -220,14 +263,19 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
 
   const handleAudioEnded = () => {
     setIsBufferingEntryId(null);
-    if (!isContinuousPlay || !detailAyahs.length || !playingEntryId) {
+    const list = detailAyahsRef.current;
+    const currentId = activeEntryIdRef.current;
+    if (!continuousRef.current || !list.length || !currentId) {
+      activeEntryIdRef.current = null;
       setPlayingEntryId(null);
       return;
     }
-    const idx = detailAyahs.findIndex((a) => a.id === playingEntryId);
-    if (idx >= 0 && idx < detailAyahs.length - 1) {
-      playEntry(detailAyahs[idx + 1], true);
+    const idx = list.findIndex((a) => a.id === currentId);
+    if (idx >= 0 && idx < list.length - 1) {
+      playEntry(list[idx + 1], true);
     } else {
+      activeEntryIdRef.current = null;
+      continuousRef.current = false;
       setPlayingEntryId(null);
       setIsContinuousPlay(false);
     }
@@ -391,6 +439,7 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
             const text = getLocalizedTranslation(entry);
             return (
               <article
+                id={`topic-ayah-${entry.id}`}
                 key={entry.id}
                 className={`rounded-2xl border p-5 sm:p-6 space-y-4 transition-all ayah-card-resting ${
                   isPlayingThis
@@ -414,7 +463,7 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => playEntry(entry, false)}
+                      onClick={() => playEntry(entry, autoplayQueue)}
                       className={`min-h-[36px] px-3 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
                         isPlayingThis
                           ? 'bg-[#D97706] text-white'
@@ -520,7 +569,7 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
           How Is Your Heart Today?
         </h1>
         <p className="text-sm text-[#404944] dark:text-emerald-200/80 max-w-2xl">
-          Discover verses tailored to what your soul needs—paired with continuous Qari recitation, Tajweed articulation highlights, and classical commentary.
+          Verses selected for your spiritual needs with continuous Qari recitation, Tajweed highlights, and classical commentary.
         </p>
       </div>
 

@@ -510,7 +510,7 @@ export async function fetchDriveFileActivity(
 
 export function buildStudyJournalMarkdown(payload: NoorDriveBackupPayload): string {
   const lines: string[] = [
-    '# Noor Recite — Quranic Study & Tadabbur Journal',
+    '# Noor Recite · Quranic Study & Tadabbur Journal',
     '',
     `Exported: ${new Date(payload.exportedAt).toLocaleString()}`,
     `Daily Recitation Goal: ${payload.dailyGoal} verses/day`,
@@ -545,7 +545,7 @@ export function buildStudyJournalMarkdown(payload: NoorDriveBackupPayload): stri
   } else {
     for (const item of payload.hifzSpacedQueue) {
       lines.push(
-        `- ${item.surahName} ${item.verseKey} — Stage ${item.stage}/5 (${item.intervalLabel})`
+        `- ${item.surahName} ${item.verseKey} · Stage ${item.stage}/5 (${item.intervalLabel})`
       );
     }
     lines.push('');
@@ -554,7 +554,7 @@ export function buildStudyJournalMarkdown(payload: NoorDriveBackupPayload): stri
   if (payload.hifzWeakWords.length > 0) {
     lines.push(`## Focused Tajweed & Hifz Words (${payload.hifzWeakWords.length})`, '');
     for (const w of payload.hifzWeakWords) {
-      lines.push(`- ${w.arabic} (${w.transliteration}) — ${w.meaning} [${w.surahName} ${w.verseKey}]`);
+      lines.push(`- ${w.arabic} (${w.transliteration}): ${w.meaning} [${w.surahName} ${w.verseKey}]`);
     }
     lines.push('');
   }
@@ -697,9 +697,9 @@ export function parseNoorBackupJson(rawText: string): NoorDriveBackupPayload | n
 }
 
 export function formatDriveBytes(sizeStr?: string): string {
-  if (!sizeStr) return '—';
+  if (!sizeStr) return '-';
   const bytes = Number(sizeStr);
-  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (!Number.isFinite(bytes) || bytes < 0) return '-';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
