@@ -562,18 +562,135 @@ export function buildStudyJournalMarkdown(payload: NoorDriveBackupPayload): stri
   return lines.join('\n');
 }
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasStrings(record: JsonRecord, ...keys: string[]): boolean {
+  return keys.every((key) => typeof record[key] === 'string');
+}
+
+function hasBooleans(record: JsonRecord, ...keys: string[]): boolean {
+  return keys.every((key) => typeof record[key] === 'boolean');
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isInteger(value: unknown, min: number, max = Number.MAX_SAFE_INTEGER): boolean {
+  return isFiniteNumber(value) && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function isArrayOf(value: unknown, check: (entry: unknown) => boolean): boolean {
+  return Array.isArray(value) && value.every(check);
+}
+
+function isOneOf(value: unknown, ...options: (string | number)[]): boolean {
+  return options.some((option) => option === value);
+}
+
+const languages: readonly unknown[] = ['en', 'hi', 'ur', 'bn', 'ms', 'ha', 'ff'];
+
+function hasVerseFields(record: JsonRecord): boolean {
+  return hasStrings(record, 'verseKey', 'surahName') &&
+    isInteger(record.surahId, 1, 114) && isInteger(record.ayahNumber, 1, 286);
+}
+
+function isBookmark(value: unknown): boolean {
+  return isRecord(value) && hasVerseFields(value) &&
+    hasStrings(value, 'arabic', 'translation', 'note', 'savedAt') &&
+    (value.collectionId === undefined || typeof value.collectionId === 'string') &&
+    (value.translationLanguage === undefined || languages.includes(value.translationLanguage));
+}
+
+function isReaderSettings(value: unknown): boolean {
+  return isRecord(value) &&
+    isOneOf(value.arabicFont, 'amiri', 'scheherazade') &&
+    isFiniteNumber(value.arabicFontSize) && value.arabicFontSize > 0 &&
+    languages.includes(value.translationLanguage) &&
+    hasBooleans(value, 'showTransliteration', 'showTranslation', 'showTajweedColors', 'alwaysShowFootnotes') &&
+    typeof value.reciterId === 'string' &&
+    isOneOf(value.playbackSpeed, 0.75, 1, 1.25) &&
+    isOneOf(value.repeatMode, 'off', 'ayah', 'surah') &&
+    isFiniteNumber(value.syncOffsetSec) &&
+    (value.highlightStyle === undefined || isOneOf(value.highlightStyle, 'pill', 'wave', 'box', 'glow')) &&
+    (value.reflectionDelaySec === undefined || isOneOf(value.reflectionDelaySec, 0, 1, 2)) &&
+    (value.wordRepeatCount === undefined || isOneOf(value.wordRepeatCount, 1, 3, 5)) &&
+    (value.riwayah === undefined || value.riwayah === 'hafs' || value.riwayah === 'warsh') &&
+    (value.maghrebiOrthography === undefined || typeof value.maghrebiOrthography === 'boolean');
+}
+
+function isKhatmahSlot(value: unknown): boolean {
+  return isRecord(value) &&
+    isOneOf(value.id, 'fajr', 'dhuhr', 'asr', 'maghrib', 'isha') &&
+    hasStrings(value, 'label', 'arabicLabel', 'surahName') &&
+    isInteger(value.surahId, 1, 114) && isInteger(value.startAyah, 1, 286) &&
+    isInteger(value.pageStart, 1) && isInteger(value.pageEnd, 1) &&
+    typeof value.completed === 'boolean';
+}
+
+function isKhatmahPlan(value: unknown): boolean {
+  return isRecord(value) &&
+    isOneOf(value.targetDays, 30, 60, 90) &&
+    isInteger(value.currentDay, 1) && isInteger(value.pagesCompleted, 0) &&
+    isInteger(value.totalPages, 1) && isInteger(value.juzNumber, 1, 30) &&
+    isOneOf(value.scheduleStyle, 'five-prayers', 'two-sessions', 'single-session') &&
+    hasBooleans(value, 'hifzSyncEnabled', 'salahRemindersEnabled') &&
+    isArrayOf(value.streakDays, (entry) => isInteger(entry, 0)) &&
+    isArrayOf(value.slots, isKhatmahSlot);
+}
+
+function isSpacedItem(value: unknown): boolean {
+  return isRecord(value) && hasVerseFields(value) && hasStrings(value, 'id', 'intervalLabel') &&
+    isInteger(value.stage, 1, 5) && isFiniteNumber(value.updatedAt) &&
+    isOneOf(value.source, 'khatmah', 'topic', 'manual') &&
+    (value.lastScore === undefined || isFiniteNumber(value.lastScore));
+}
+
+function isWeakWord(value: unknown): boolean {
+  return isRecord(value) && hasVerseFields(value) &&
+    hasStrings(value, 'id', 'arabic', 'transliteration', 'meaning') &&
+    (value.tajweedNote === undefined || typeof value.tajweedNote === 'string') &&
+    isFiniteNumber(value.addedAt) && isInteger(value.reviewCount, 0);
+}
+
+function isHistoryEntry(value: unknown): boolean {
+  return isRecord(value) &&
+    hasStrings(value, 'id', 'date', 'surahName', 'verseKey') &&
+    isInteger(value.surahId, 1, 114) && isFiniteNumber(value.durationSec) &&
+    isFiniteNumber(value.timestamp);
+}
+
+function isProgressEvent(value: unknown): boolean {
+  return isRecord(value) && hasStrings(value, 'id', 'date', 'verseKey') &&
+    isInteger(value.surahId, 1, 114) && isInteger(value.stage, 1, 5) &&
+    (value.status === 'memorized' || value.status === 'mastered') &&
+    isFiniteNumber(value.timestamp);
+}
+
+function isNoorBackup(value: unknown): value is NoorDriveBackupPayload {
+  return isRecord(value) && value.app === 'Noor Recite' && value.version === 1 &&
+    typeof value.exportedAt === 'string' && Number.isFinite(Date.parse(value.exportedAt)) &&
+    (value.accountEmail === undefined || typeof value.accountEmail === 'string') &&
+    isReaderSettings(value.settings) && typeof value.darkMode === 'boolean' &&
+    isInteger(value.dailyGoal, 1) && isArrayOf(value.bookmarks, isBookmark) &&
+    isArrayOf(value.bookmarkCollections, (entry) =>
+      isRecord(entry) && hasStrings(entry, 'id', 'name', 'description', 'createdAt')
+    ) &&
+    isKhatmahPlan(value.khatmahPlan) &&
+    isArrayOf(value.hifzSpacedQueue, isSpacedItem) &&
+    isArrayOf(value.hifzWeakWords, isWeakWord) &&
+    isArrayOf(value.recitationHistory, isHistoryEntry) &&
+    isArrayOf(value.hifzProgressEvents, isProgressEvent);
+}
+
 export function parseNoorBackupJson(rawText: string): NoorDriveBackupPayload | null {
   try {
-    const parsed = JSON.parse(rawText) as Partial<NoorDriveBackupPayload>;
-    if (
-      !parsed ||
-      parsed.app !== 'Noor Recite' ||
-      typeof parsed.version !== 'number' ||
-      !Array.isArray(parsed.bookmarks)
-    ) {
-      return null;
-    }
-    return parsed as NoorDriveBackupPayload;
+    const parsed: unknown = JSON.parse(rawText);
+    return isNoorBackup(parsed) ? parsed : null;
   } catch {
     return null;
   }
