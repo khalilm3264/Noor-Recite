@@ -25,6 +25,7 @@ import {
 } from '../types/quran';
 import { DUAS_AND_KALIMAS } from '../data/duasAndKalimas';
 import { getEveryAyahUrl } from '../data/quranData';
+import { alignPausedNarrationQueue } from '../utils/narrationQueue';
 import { ensureAudioCached, getCachedAudioSrc } from '../utils/audioCache';
 import {
   QARI_TTS_STYLES,
@@ -933,12 +934,21 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const handleSelectVariant = useCallback(
     (baseItem: DuaOrKalimaItem, variantId: string) => {
       setSelectedVariants((prev) => ({ ...prev, [baseItem.id]: variantId }));
-      if (activeId === baseItem.id) {
+      const pausedQueue = !isPlaying ? narrationQueueRef.current : null;
+      if (activeId === baseItem.id || (pausedQueue && activeItemRef.current?.id === baseItem.id)) {
         const nextResolved = resolveEffectiveDuaItem(baseItem, variantId);
         if (isPlaying) {
           narrationQueueRef.current = null;
           startPlaybackForItem(nextResolved, queueFlagRef.current);
         } else {
+          if (pausedQueue) {
+            const alignedQueue = alignPausedNarrationQueue(pausedQueue, baseItem.id, variantId);
+            narrationQueueRef.current = alignedQueue;
+            if (!alignedQueue) {
+              queueFlagRef.current = false;
+              setIsQueuePlaying(false);
+            }
+          }
           stopSpeech();
           if (audioRef.current) {
             audioRef.current.pause();
