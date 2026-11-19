@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Check,
   Copy,
+  Heart,
   Loader2,
   Pause,
   Play,
@@ -64,8 +65,14 @@ interface DuasKalimasViewProps {
   onPauseReaderAudio?: () => void;
 }
 
-const CATEGORY_TABS: { id: 'all' | DuaCategory; label: string }[] = [
+type DuaTab = 'all' | 'favorites' | DuaCategory;
+
+type Narration = { item: DuaOrKalimaItem; variantId: string };
+
+const FAVORITES_KEY = 'noor_dua_favorites_v1';
+const CATEGORY_TABS: { id: DuaTab; label: string }[] = [
   { id: 'all', label: 'All Essentials' },
+  { id: 'favorites', label: 'Favorites' },
   { id: 'kalimas', label: '6 Kalimas' },
   { id: 'daily', label: 'Daily Duas' },
   { id: 'quranic', label: "Qur'anic Duas" },
@@ -124,7 +131,32 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   onPracticeInReader,
   onPauseReaderAudio,
 }) => {
-  const [activeCategory, setActiveCategory] = useState<'all' | DuaCategory>('all');
+  const [activeCategory, setActiveCategory] = useState<DuaTab>('all');
+  const [includeVariations, setIncludeVariations] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]');
+      return Array.isArray(saved)
+        ? [...new Set(saved.filter((id): id is string => typeof id === 'string'))]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+    } catch {
+      // Favorites remain available for this session if storage is unavailable.
+    }
+  }, [favorites]);
+
+  const toggleFavorite = (id: string) => {
+    setFavorites((saved) => saved.includes(id)
+      ? saved.filter((favorite) => favorite !== id)
+      : [...saved, id]);
+  };
   const [query, setQuery] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -156,6 +188,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const aiAttemptedRef = useRef<Set<string>>(new Set());
   const activeItemRef = useRef<DuaOrKalimaItem | null>(null);
   const queueFlagRef = useRef(false);
+  const narrationQueueRef = useRef<{ tracks: Narration[]; index: number } | null>(null);
   const loopFlagRef = useRef(false);
   const filteredRef = useRef<DuaOrKalimaItem[]>([]);
   const playbackSessionRef = useRef(0);
@@ -266,7 +299,9 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return DUAS_AND_KALIMAS.filter((item) => {
-      if (activeCategory !== 'all' && item.category !== activeCategory) {
+      if (activeCategory === 'favorites') {
+        if (!favorites.includes(item.id)) return false;
+      } else if (activeCategory !== 'all' && item.category !== activeCategory) {
         return false;
       }
       if (!q) return true;
@@ -299,7 +334,9 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         )
       );
     });
-  }, [activeCategory, query, resolveDynamicText]);
+  }, [activeCategory, favorites, query, resolveDynamicText]);
+
+  const narrationCount = filteredItems.reduce((total, item) => total + 1 + (item.alternates?.length ?? 0), 0);
 
   filteredRef.current = filteredItems;
   const getActiveVariantIdRef = useRef(getActiveVariantId);
@@ -434,6 +471,36 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     };
   }, [stopSpeech]);
 
+  const playNarration = useCallback((track: Narration) => {
+    setSelectedVariants((previous) => ({ ...previous, [track.item.id]: track.variantId }));
+    startPlaybackRef.current(resolveEffectiveDuaItem(track.item, track.variantId), true);
+  }, []);
+
+  const advanceQueue = useCallback((item: DuaOrKalimaItem): boolean => {
+    if (!queueFlagRef.current) return false;
+    const narrations = narrationQueueRef.current;
+    if (narrations) {
+      const next = narrations.tracks[narrations.index + 1];
+      if (next) {
+        narrations.index += 1;
+        playNarration(next);
+        return true;
+      }
+      narrationQueueRef.current = null;
+    } else {
+      const list = filteredRef.current;
+      const index = list.findIndex((candidate) => candidate.id === item.id);
+      const next = index >= 0 ? list[index + 1] : undefined;
+      if (next) {
+        startPlaybackRef.current(resolveEffectiveDuaItem(next, getActiveVariantIdRef.current(next)), true);
+        return true;
+      }
+    }
+    queueFlagRef.current = false;
+    setIsQueuePlaying(false);
+    return false;
+  }, [playNarration]);
+
   const tryArabicSpeechFallback = useCallback(
     (item: DuaOrKalimaItem): boolean => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -447,6 +514,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
           settings.qariVoiceProfile ?? 'recorded'
         );
 
+        const session = playbackSessionRef.current;
         const utterance = new SpeechSynthesisUtterance(
           normalizeArabicForSpeech(item.arabic)
         );
@@ -456,31 +524,21 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         utterance.rate = Math.max(0.65, Math.min(1.3, settings.playbackSpeed * 0.9));
         setSpeechCharIndex(null);
         utterance.onboundary = (ev) => {
-          if (typeof ev.charIndex === 'number') {
+          if (session === playbackSessionRef.current && typeof ev.charIndex === 'number') {
             setSpeechCharIndex(ev.charIndex);
           }
         };
 
         utterance.onend = () => {
+          if (session !== playbackSessionRef.current) return;
           setIsSpeechFallback(false);
           setSpeechCharIndex(null);
-          if (queueFlagRef.current) {
-            const list = filteredRef.current;
-            const idx = list.findIndex((d) => d.id === item.id);
-            if (idx >= 0 && idx < list.length - 1) {
-              const nextBase = list[idx + 1];
-              const nextResolved = resolveEffectiveDuaItem(
-                nextBase,
-                getActiveVariantIdRef.current(nextBase)
-              );
-              startPlaybackRef.current(nextResolved, true);
-              return;
-            }
-          }
+          if (advanceQueue(item)) return;
           setIsQueuePlaying(false);
           setIsPlaying(false);
         };
         utterance.onerror = () => {
+          if (session !== playbackSessionRef.current) return;
           setIsPlaying(false);
           setIsSpeechFallback(false);
           setSpeechCharIndex(null);
@@ -497,7 +555,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         return false;
       }
     },
-    [settings.playbackSpeed, settings.qariVoiceProfile]
+    [advanceQueue, settings.playbackSpeed, settings.qariVoiceProfile]
   );
 
   const attachUrlAndAnalyze = useCallback(
@@ -761,9 +819,10 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const startPlaybackRef = useRef(startPlaybackForItem);
   startPlaybackRef.current = startPlaybackForItem;
 
-  const handleToggleRecite = (item: DuaOrKalimaItem) => {
+  const handleToggleRecite = (item: DuaOrKalimaItem, keepNarrations = false) => {
     const audio = audioRef.current;
-    const shouldAutoplay = settings.autoplayQueue !== false;
+    const shouldAutoplay = keepNarrations || settings.autoplayQueue !== false;
+    if (!keepNarrations) narrationQueueRef.current = null;
 
     if (activeId === item.id && isPlaying) {
       stopSpeech();
@@ -774,7 +833,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       setIsPlaying(false);
       setIsBuffering(false);
       setIsSpeechFallback(false);
-      setIsQueuePlaying(false);
+      setIsQueuePlaying(keepNarrations);
       return;
     }
 
@@ -805,7 +864,12 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   };
 
   const handleTogglePlayAll = () => {
+    if (narrationQueueRef.current && isQueuePlaying && activeItemRef.current) {
+      handleToggleRecite(activeItemRef.current, true);
+      return;
+    }
     if (isQueuePlaying && isPlaying) {
+      narrationQueueRef.current = null;
       stopSpeech();
       audioRef.current?.pause();
       queueFlagRef.current = false;
@@ -816,7 +880,18 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     }
     if (!filteredItems.length) return;
     setLoopActiveItem(false);
+    loopFlagRef.current = false;
     setAutoScrollEnabled(true);
+    if (includeVariations) {
+      const tracks = filteredItems.flatMap((item) =>
+        ['primary', ...(item.alternates?.map((alternate) => alternate.id) ?? [])]
+          .map((variantId) => ({ item, variantId }))
+      );
+      narrationQueueRef.current = { tracks, index: 0 };
+      playNarration(tracks[0]);
+      return;
+    }
+    narrationQueueRef.current = null;
     queueFlagRef.current = true;
     setIsQueuePlaying(true);
     const rawStart =
@@ -828,6 +903,16 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
 
   const handleStepQueue = useCallback(
     (dir: -1 | 1) => {
+      const narrations = narrationQueueRef.current;
+      if (narrations && isQueuePlaying) {
+        const nextIndex = narrations.index + dir;
+        const target = narrations.tracks[nextIndex];
+        if (target) {
+          narrations.index = nextIndex;
+          playNarration(target);
+        }
+        return;
+      }
       if (!filteredItems.length) return;
       const idx = activeId
         ? filteredItems.findIndex((d) => d.id === activeId)
@@ -842,7 +927,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         startPlaybackForItem(resolved, isQueuePlaying || isPlaying);
       }
     },
-    [filteredItems, activeId, startPlaybackForItem, isQueuePlaying, isPlaying, getActiveVariantId]
+    [filteredItems, activeId, startPlaybackForItem, isQueuePlaying, isPlaying, getActiveVariantId, playNarration]
   );
 
   const handleSelectVariant = useCallback(
@@ -851,6 +936,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       if (activeId === baseItem.id) {
         const nextResolved = resolveEffectiveDuaItem(baseItem, variantId);
         if (isPlaying) {
+          narrationQueueRef.current = null;
           startPlaybackForItem(nextResolved, queueFlagRef.current);
         } else {
           stopSpeech();
@@ -1074,19 +1160,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       }
     }
 
-    if (queueFlagRef.current) {
-      const idx = filteredRef.current.findIndex((d) => d.id === currentItem.id);
-      if (idx >= 0 && idx < filteredRef.current.length - 1) {
-        const nextItem = filteredRef.current[idx + 1];
-        const nextResolved = resolveEffectiveDuaItem(
-          nextItem,
-          getActiveVariantIdRef.current(nextItem)
-        );
-        startPlaybackForItem(nextResolved, true);
-        return;
-      }
-      setIsQueuePlaying(false);
-    }
+    if (advanceQueue(currentItem)) return;
 
     setIsPlaying(false);
     setCurrentTime(0);
@@ -1275,7 +1349,9 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
             const count =
               tab.id === 'all'
                 ? DUAS_AND_KALIMAS.length
-                : DUAS_AND_KALIMAS.filter((d) => d.category === tab.id).length;
+                : tab.id === 'favorites'
+                  ? DUAS_AND_KALIMAS.filter((item) => favorites.includes(item.id)).length
+                  : DUAS_AND_KALIMAS.filter((d) => d.category === tab.id).length;
             return (
               <button
                 key={tab.id}
@@ -1309,6 +1385,15 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
               Autoplay: {settings.autoplayQueue !== false ? 'On' : 'Off'}
             </button>
           )}
+          <label className="min-h-[38px] inline-flex items-center gap-2 px-3 text-xs font-semibold text-[#064E3B] dark:text-emerald-200">
+            <input
+              type="checkbox"
+              checked={includeVariations}
+              onChange={(event) => setIncludeVariations(event.target.checked)}
+              className="accent-[#064E3B] dark:accent-emerald-400"
+            />
+            Include all narrations
+          </label>
           {filteredItems.length > 0 && (
             <button
               type="button"
@@ -1327,7 +1412,9 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
               ) : (
                 <>
                   <ScrollText className="w-3.5 h-3.5" />
-                  <span>Reading Mode ({filteredItems.length})</span>
+                  <span>{narrationQueueRef.current && isQueuePlaying
+                    ? 'Resume Reading Mode'
+                    : `Reading Mode (${includeVariations ? narrationCount : filteredItems.length})`}</span>
                 </>
               )}
             </button>
@@ -1414,16 +1501,19 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
       {filteredItems.length === 0 ? (
         <div className="rounded-2xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] p-10 text-center space-y-2 ayah-card-resting">
           <p className="text-base font-bold text-[#022C22] dark:text-[#E6FFF4]">
-            No Matching Duas or Kalimas
+            {activeCategory === 'favorites' && !query ? 'No favorites yet' : 'No Matching Duas or Kalimas'}
           </p>
           <p className="text-xs text-[#404944] dark:text-emerald-200/75">
-            Try clearing your search or selecting another category tab.
+            {activeCategory === 'favorites' && !query
+              ? 'Tap the heart on a dua or kalima to save it here.'
+              : 'Try clearing your search or selecting another category tab.'}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           {filteredItems.map((baseItem, idx) => {
             const activeVariantId = getActiveVariantId(baseItem);
+            const isFavorite = favorites.includes(baseItem.id);
             const item = resolveEffectiveDuaItem(baseItem, activeVariantId);
             const count = counts[baseItem.id] ?? 0;
             const target = baseItem.recommendedCount;
@@ -1488,8 +1578,16 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Quick Actions: Recite Audio, Open in Reader (if Qur'anic), Copy */}
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(baseItem.id)}
+                      aria-label={isFavorite ? `Remove ${baseItem.title} from favorites` : `Favorite ${baseItem.title}`}
+                      aria-pressed={isFavorite}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-[#064E3B] hover:bg-[#064E3B]/8 dark:text-emerald-200 dark:hover:bg-emerald-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"
+                    >
+                      <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleToggleRecite(item)}
@@ -1566,6 +1664,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleSelectVariant(baseItem, 'primary')}
+                      aria-pressed={activeVariantId === 'primary'}
                       className={`min-h-[30px] px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
                         activeVariantId === 'primary'
                           ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
@@ -1581,6 +1680,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                           key={alt.id}
                           type="button"
                           onClick={() => handleSelectVariant(baseItem, alt.id)}
+                          aria-pressed={isVarActive}
                           className={`min-h-[30px] px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
                             isVarActive
                               ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
