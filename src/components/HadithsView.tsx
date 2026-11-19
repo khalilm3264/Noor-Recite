@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   Check,
   Copy,
+  Heart,
   Loader2,
   Pause,
   Play,
@@ -12,6 +13,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import {
+  FavoriteItem,
   HadithCategory,
   HadithItem,
   HadithTradition,
@@ -47,6 +49,7 @@ import { LanguagePillSelector } from './LanguagePillSelector';
 import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { formatFavoriteSavedDate, getHadithFavoriteId } from '../utils/favorites';
 import { ScrollText, SkipBack, SkipForward } from 'lucide-react';
 
 interface HadithsViewProps {
@@ -56,6 +59,10 @@ interface HadithsViewProps {
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
   onToggleAutoplayQueue?: () => void;
+  favoriteIds?: ReadonlySet<string>;
+  onToggleFavorite?: (item: FavoriteItem) => void;
+  initialFocusHadithId?: string | null;
+  onClearFocusTarget?: () => void;
 }
 
 const TRADITION_TABS: { id: 'all' | HadithTradition; label: string }[] = [
@@ -83,8 +90,11 @@ const TRADITION_META: Record<
   },
 };
 
-const CATEGORY_TABS: { id: 'all' | HadithCategory; label: string }[] = [
+type HadithFilterTab = 'all' | 'favorites' | HadithCategory;
+
+const CATEGORY_TABS: { id: HadithFilterTab; label: string }[] = [
   { id: 'all', label: 'All Topics' },
+  { id: 'favorites', label: 'Favorites' },
   { id: 'faith', label: 'Faith & Sincerity' },
   { id: 'character', label: 'Character & Mercy' },
   { id: 'worship', label: 'Worship & Heart' },
@@ -115,9 +125,13 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
   onPracticeInReader,
   onPauseReaderAudio,
   onToggleAutoplayQueue,
+  favoriteIds,
+  onToggleFavorite,
+  initialFocusHadithId,
+  onClearFocusTarget,
 }) => {
   const [activeTradition, setActiveTradition] = useState<'all' | HadithTradition>('all');
-  const [activeCategory, setActiveCategory] = useState<'all' | HadithCategory>('all');
+  const [activeCategory, setActiveCategory] = useState<HadithFilterTab>('all');
   const [query, setQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -167,13 +181,27 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
       ? 'font-quran-scheherazade'
       : 'font-quran-amiri';
 
+  useEffect(() => {
+    if (!initialFocusHadithId) return;
+    setActiveTradition('all');
+    setActiveCategory('all');
+    setQuery('');
+    const timer = window.setTimeout(() => {
+      scrollTargetIntoCenter(`hadith-card-${initialFocusHadithId}`);
+      onClearFocusTarget?.();
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [initialFocusHadithId, onClearFocusTarget]);
+
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return POPULAR_HADITHS.filter((item) => {
       if (activeTradition !== 'all' && item.tradition !== activeTradition) {
         return false;
       }
-      if (activeCategory !== 'all' && item.category !== activeCategory) {
+      if (activeCategory === 'favorites') {
+        if (!favoriteIds?.has(getHadithFavoriteId(item.id))) return false;
+      } else if (activeCategory !== 'all' && item.category !== activeCategory) {
         return false;
       }
       if (!q) return true;
@@ -192,7 +220,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         item.lessonEn.toLowerCase().includes(q)
       );
     });
-  }, [activeTradition, activeCategory, query, resolveDynamicText]);
+  }, [activeTradition, activeCategory, favoriteIds, query, resolveDynamicText]);
 
   filteredRef.current = filteredItems;
 
@@ -805,19 +833,26 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
             const count =
               tab.id === 'all'
                 ? scoped.length
+                : tab.id === 'favorites'
+                ? scoped.filter((h) => favoriteIds?.has(getHadithFavoriteId(h.id))).length
                 : scoped.filter((h) => h.category === tab.id).length;
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveCategory(tab.id)}
-                className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
                   active
-                    ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
+                    ? tab.id === 'favorites'
+                      ? 'bg-rose-600 text-white dark:bg-rose-500 dark:text-white'
+                      : 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
                     : 'bg-white dark:bg-[#0A2921] border border-[#064E3B]/12 dark:border-emerald-300/15 text-[#404944] hover:text-[#022C22] dark:text-emerald-200/85 dark:hover:text-white'
                 }`}
               >
-                {tab.label} ({count})
+                {tab.id === 'favorites' && (
+                  <Heart className={`w-3.5 h-3.5 ${active || count > 0 ? 'fill-current' : ''} ${active ? '' : 'text-rose-500 dark:text-rose-400'}`} />
+                )}
+                <span>{tab.label} ({count})</span>
               </button>
             );
           })}
@@ -1055,6 +1090,45 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
                         </>
                       )}
                     </button>
+
+                    {onToggleFavorite && (() => {
+                      const favId = getHadithFavoriteId(item.id);
+                      const isFav = Boolean(favoriteIds?.has(favId));
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onToggleFavorite({
+                              id: favId,
+                              type: 'hadith',
+                              title: item.title,
+                              subtitle: item.narrator,
+                              arabic: item.arabic,
+                              transliteration: item.transliteration,
+                              translation: localizedTranslation,
+                              reference: `${item.reference} · ${item.grading}`,
+                              savedAt: formatFavoriteSavedDate(),
+                              hadithId: item.id,
+                            })
+                          }
+                          aria-pressed={isFav}
+                          aria-label={
+                            isFav
+                              ? `Remove ${item.title} from favorites`
+                              : `Favorite ${item.title}`
+                          }
+                          title={isFav ? 'Favorited' : 'Favorite Hadith'}
+                          className={`min-h-[36px] min-w-[36px] px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                            isFav
+                              ? 'border-rose-500/35 bg-rose-500/10 text-rose-600 dark:border-rose-400/35 dark:bg-rose-400/15 dark:text-rose-300'
+                              : 'border-[#064E3B]/12 dark:border-emerald-300/18 text-[#404944] hover:text-rose-600 hover:border-rose-400/30 hover:bg-rose-500/5 dark:text-emerald-200/80 dark:hover:text-rose-300'
+                          }`}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                          <span className="hidden sm:inline">{isFav ? 'Saved' : 'Favorite'}</span>
+                        </button>
+                      );
+                    })()}
 
                     {item.quranRef && (
                       <button

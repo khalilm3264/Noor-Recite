@@ -210,6 +210,29 @@ export interface BookmarkCollection {
   createdAt: string;
 }
 
+export type FavoriteItemType = 'verse' | 'dua' | 'hadith' | 'salah';
+
+export interface FavoriteItem {
+  id: string;
+  type: FavoriteItemType;
+  title: string;
+  subtitle?: string;
+  arabic: string;
+  transliteration?: string;
+  translation: string;
+  reference?: string;
+  savedAt: string;
+  surahId?: number;
+  ayahNumber?: number;
+  verseKey?: string;
+  duaId?: string;
+  duaVariantId?: string;
+  duaVariantLabel?: string;
+  hadithId?: string;
+  salahStepId?: string;
+  salahTab?: 'guides' | 'steps' | 'wudu';
+}
+
 export interface HifzSpacedItem {
   id: string;
   verseKey: string;
@@ -282,6 +305,7 @@ export interface ReaderSettings {
   readingMode?: boolean;
   qariVoiceProfile?: QariVoiceProfile;
   autoplayQueue?: boolean;
+  playAllDuaVariations?: boolean;
   playEntireJuz?: boolean;
   activeJuzNumber?: number;
 }

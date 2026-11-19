@@ -109,3 +109,66 @@ test('client source code never calls /api/tts at runtime', () => {
     }
   }
 });
+
+test('all 267 authentic Hisn al-Muslim Qari recordings (1.mp3 through 267.mp3) are present in DUAS_AND_KALIMAS', () => {
+  const foundIds = new Set<number>();
+  const pattern = /hisnmuslim\.com\/audio\/ar\/(\d+)\.mp3$/;
+  for (const dua of DUAS_AND_KALIMAS) {
+    const urls = [
+      dua.audioUrl,
+      dua.fallbackAudioUrl,
+      ...(dua.alternates ?? []).flatMap((alt) => [alt.audioUrl, alt.fallbackAudioUrl]),
+    ];
+    for (const url of urls) {
+      const m = url?.match(pattern);
+      if (m) foundIds.add(Number(m[1]));
+    }
+  }
+
+  const missing: number[] = [];
+  for (let id = 1; id <= 267; id++) {
+    if (!foundIds.has(id)) missing.push(id);
+  }
+  assert.deepEqual(missing, [], `Missing Hisn al-Muslim Qari recordings: ${missing.join(', ')}`);
+  assert.equal(foundIds.size, 267);
+});
+
+test('complete Qur’anic Rabbana & Prophetic Duas (including Rabbi Shrah Li Sadri 20:25-28) are present with valid quranRef/quranRange', () => {
+  const quranicRefs = new Set<string>();
+  for (const dua of DUAS_AND_KALIMAS) {
+    if (dua.category !== 'quranic') continue;
+    const items = [dua, ...(dua.alternates ?? [])];
+    for (const item of items) {
+      if (item.quranRef) {
+        quranicRefs.add(`${item.quranRef.surahId}:${item.quranRef.ayahNumber}`);
+      }
+      if (item.quranRange) {
+        for (let a = item.quranRange.startAyah; a <= item.quranRange.endAyah; a++) {
+          quranicRefs.add(`${item.quranRange.surahId}:${a}`);
+        }
+      }
+    }
+  }
+
+  const musa = DUAS_AND_KALIMAS.find((d) => d.id === 'dua-musa-shrah-sadri');
+  assert.ok(musa, 'Expected dua-musa-shrah-sadri (Rabbi Shrah Li Sadri) in DUAS_AND_KALIMAS');
+  assert.deepEqual(musa.quranRange, { surahId: 20, startAyah: 25, endAyah: 28 });
+
+  const requiredRefs = [
+    '20:25', '20:26', '20:27', '20:28', // Rabbi Shrah Li Sadri (Musa)
+    '7:23',   // Adam's Repentance
+    '21:83',  // Ayyub's Healing
+    '21:87',  // Yunus in Distress
+    '2:127', '2:128', '2:201', '2:250', '2:286', // Baqarah Rabbana Duas
+    '3:8', '3:9', '3:16', '3:38', '3:53', '3:147', '3:191', '3:194', // Ali 'Imran Duas
+    '5:114',  // Prophet Isa's Dua
+    '7:89', '7:126', '10:85', '11:47', '12:101', '14:40', '14:41',
+    '17:24', '17:80', '18:10', '20:114', '21:89', '23:97', '23:118',
+    '25:65', '25:74', '26:83', '27:19', '28:16', '28:21', '28:24',
+    '37:100', '38:35', '40:7', '46:15', '54:10', '59:10', '60:4', '66:8', '66:11', '71:28',
+  ];
+  const missingRefs = requiredRefs.filter((r) => !quranicRefs.has(r));
+  assert.deepEqual(missingRefs, [], `Missing canonical Qur'anic Duas: ${missingRefs.join(', ')}`);
+});
+
+

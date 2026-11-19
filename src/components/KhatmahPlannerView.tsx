@@ -192,7 +192,8 @@ export const KhatmahPlannerView: React.FC<KhatmahPlannerViewProps> = ({
       const utter = new SpeechSynthesisUtterance(DUA_KHATM_ARABIC);
       utter.lang = arabicVoice?.lang || 'ar-SA';
       if (arabicVoice) utter.voice = arabicVoice;
-      utter.rate = 0.85;
+      utter.rate = 1;
+      utter.pitch = 1;
       utter.onend = () => {
         setIsSpeakingDua(false);
         setDuaSpeechFallback(false);

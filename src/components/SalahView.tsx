@@ -4,6 +4,7 @@ import {
   Clock,
   Droplets,
   HandHeart,
+  Heart,
   ListMusic,
   Loader2,
   MoonStar,
@@ -19,6 +20,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import {
+  FavoriteItem,
   PrayerCategory,
   PrayerGuideItem,
   QariVoiceProfile,
@@ -64,6 +66,7 @@ import { LanguagePillSelector } from './LanguagePillSelector';
 import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { formatFavoriteSavedDate, getSalahFavoriteId } from '../utils/favorites';
 
 interface SalahViewProps {
   settings: ReaderSettings;
@@ -73,6 +76,10 @@ interface SalahViewProps {
   onToggleAutoplayQueue?: () => void;
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
+  favoriteIds?: ReadonlySet<string>;
+  onToggleFavorite?: (item: FavoriteItem) => void;
+  initialFocusSalah?: { tab: 'guides' | 'steps' | 'wudu'; id: string } | null;
+  onClearFocusTarget?: () => void;
 }
 
 type SalahTab = 'guides' | 'steps' | 'wudu';
@@ -159,11 +166,33 @@ export const SalahView: React.FC<SalahViewProps> = ({
   onToggleAutoplayQueue,
   onPracticeInReader,
   onPauseReaderAudio,
+  favoriteIds,
+  onToggleFavorite,
+  initialFocusSalah,
+  onClearFocusTarget,
 }) => {
   const [activeTab, setActiveTab] = useState<SalahTab>('guides');
   const [guideFilter, setGuideFilter] = useState<'all' | PrayerCategory>('all');
   const [query, setQuery] = useState('');
   const [tasbihTotal, setTasbihTotal] = useState(0);
+
+  useEffect(() => {
+    if (!initialFocusSalah) return;
+    setActiveTab(initialFocusSalah.tab);
+    setGuideFilter('all');
+    setQuery('');
+    const elId =
+      initialFocusSalah.tab === 'steps'
+        ? `salah-step-${initialFocusSalah.id}`
+        : initialFocusSalah.tab === 'wudu'
+        ? `salah-wudu-${initialFocusSalah.id}`
+        : `salah-guide-${initialFocusSalah.id}`;
+    const timer = window.setTimeout(() => {
+      scrollTargetIntoCenter(elId);
+      onClearFocusTarget?.();
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [initialFocusSalah, onClearFocusTarget]);
 
   // Audio playback state shared cleanly across all Salah recitations
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
@@ -1762,12 +1791,48 @@ export const SalahView: React.FC<SalahViewProps> = ({
                         </div>
                       </div>
 
-                      <p
-                        dir="rtl"
-                        className={`${fontClass} text-2xl sm:text-3xl text-[#064E3B] dark:text-emerald-200 shrink-0 self-end sm:self-start`}
-                      >
-                        {guide.arabicTitle}
-                      </p>
+                      <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-start">
+                        {onToggleFavorite && (() => {
+                          const favId = getSalahFavoriteId(`guide:${guide.id}`);
+                          const isFav = Boolean(favoriteIds?.has(favId));
+                          return (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onToggleFavorite({
+                                  id: favId,
+                                  type: 'salah',
+                                  title: guide.title,
+                                  subtitle: `${guide.badge} · ${guide.totalSummary}`,
+                                  arabic: guide.niyyahArabic,
+                                  transliteration: guide.niyyahTranslit,
+                                  translation: localizedNiyyah,
+                                  reference: guide.timing,
+                                  savedAt: formatFavoriteSavedDate(),
+                                  salahStepId: guide.id,
+                                  salahTab: 'guides',
+                                })
+                              }
+                              aria-pressed={isFav}
+                              aria-label={isFav ? `Remove ${guide.title} from favorites` : `Favorite ${guide.title}`}
+                              title={isFav ? 'Favorited' : 'Favorite Prayer Guide'}
+                              className={`min-h-[36px] min-w-[36px] px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                                isFav
+                                  ? 'border-rose-500/35 bg-rose-500/10 text-rose-600 dark:border-rose-400/35 dark:bg-rose-400/15 dark:text-rose-300'
+                                  : 'border-[#064E3B]/12 dark:border-emerald-300/18 text-[#404944] hover:text-rose-600 hover:border-rose-400/30 hover:bg-rose-500/5 dark:text-emerald-200/80 dark:hover:text-rose-300'
+                              }`}
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                            </button>
+                          );
+                        })()}
+                        <p
+                          dir="rtl"
+                          className={`${fontClass} text-2xl sm:text-3xl text-[#064E3B] dark:text-emerald-200`}
+                        >
+                          {guide.arabicTitle}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Rakaat Breakdown */}
@@ -2071,6 +2136,42 @@ export const SalahView: React.FC<SalahViewProps> = ({
                           </>
                         )}
                       </button>
+
+                      {onToggleFavorite && (() => {
+                        const favId = getSalahFavoriteId(`step:${step.id}`);
+                        const isFav = Boolean(favoriteIds?.has(favId));
+                        return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onToggleFavorite({
+                                id: favId,
+                                type: 'salah',
+                                title: step.title,
+                                subtitle: `${step.posture} · ${step.repeatLabel}`,
+                                arabic: step.arabic,
+                                transliteration: step.transliteration,
+                                translation: localizedTr,
+                                reference: step.badge,
+                                savedAt: formatFavoriteSavedDate(),
+                                salahStepId: step.id,
+                                salahTab: 'steps',
+                              })
+                            }
+                            aria-pressed={isFav}
+                            aria-label={isFav ? `Remove ${step.title} from favorites` : `Favorite ${step.title}`}
+                            title={isFav ? 'Favorited' : 'Favorite Salah Recitation'}
+                            className={`min-h-[36px] min-w-[36px] px-2.5 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                              isFav
+                                ? 'border-rose-500/35 bg-rose-500/10 text-rose-600 dark:border-rose-400/35 dark:bg-rose-400/15 dark:text-rose-300'
+                                : 'border-[#064E3B]/12 dark:border-emerald-300/18 text-[#404944] hover:text-rose-600 hover:border-rose-400/30 hover:bg-rose-500/5 dark:text-emerald-200/80 dark:hover:text-rose-300'
+                            }`}
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                            <span className="hidden sm:inline">{isFav ? 'Saved' : 'Favorite'}</span>
+                          </button>
+                        );
+                      })()}
 
                       {step.quranRef && (
                         <button

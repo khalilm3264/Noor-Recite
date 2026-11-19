@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bookmark, BookOpenText, Check, ChevronDown, ChevronUp, Copy, Pause, Play } from 'lucide-react';
+import { Bookmark, BookOpenText, Check, ChevronDown, ChevronUp, Copy, Heart, Pause, Play } from 'lucide-react';
 import { Ayah, ReaderSettings, TranslationLanguage, WordToken } from '../types/quran';
 import { TAJWEED_STYLE_MAP } from '../data/tajweedRules';
 import { getWordDisplayArabic } from '../data/qiraatData';
@@ -24,11 +24,13 @@ interface AyahCardProps {
   activeWordIndex: number | null;
   selectedWordId: string | null;
   isBookmarked: boolean;
+  isFavorited?: boolean;
   settings: ReaderSettings;
   onPlayAyah: (ayahNumber: number) => void;
   onSelectWord: (ayah: Ayah, word: WordToken, wordIndex: number) => void;
   onInspectAyah: (ayah: Ayah) => void;
   onToggleBookmark: (ayah: Ayah) => void;
+  onToggleFavorite?: (ayah: Ayah) => void;
 }
 
 function toArabicIndicDigits(n: number): string {
@@ -93,11 +95,13 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
   activeWordIndex,
   selectedWordId,
   isBookmarked,
+  isFavorited = false,
   settings,
   onPlayAyah,
   onSelectWord,
   onInspectAyah,
   onToggleBookmark,
+  onToggleFavorite,
 }) => {
   const [focusedFootnoteNum, setFocusedFootnoteNum] = useState<number | null>(null);
   const [localExpandOverride, setLocalExpandOverride] = useState<boolean | null>(null);
@@ -266,6 +270,23 @@ export const AyahCard: React.FC<AyahCardProps> = React.memo(({
               </>
             )}
           </button>
+
+          {onToggleFavorite && (
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(ayah)}
+              aria-pressed={isFavorited}
+              aria-label={isFavorited ? `Remove verse ${ayah.verseKey} from favorites` : `Favorite verse ${ayah.verseKey}`}
+              title={isFavorited ? 'Favorited' : 'Favorite Verse'}
+              className={`min-h-[40px] min-w-[40px] rounded-lg flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706] ${
+                isFavorited
+                  ? 'text-rose-600 bg-rose-500/10 dark:text-rose-400 dark:bg-rose-400/15'
+                  : 'text-[#404944] hover:text-rose-600 hover:bg-rose-500/6 dark:text-emerald-200/75 dark:hover:text-rose-300 dark:hover:bg-rose-400/10'
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${isFavorited ? 'fill-current' : ''}`} />
+            </button>
+          )}
 
           <button
             type="button"

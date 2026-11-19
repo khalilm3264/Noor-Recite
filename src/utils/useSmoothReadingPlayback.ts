@@ -11,32 +11,32 @@ export const QARI_VOICE_PROFILES: {
 }[] = [
   {
     id: 'recorded',
-    label: 'Authentic Recorded Qari',
-    desc: 'Natural original recitation (unmodified)',
+    label: 'Natural Arabic · Standard',
+    desc: 'Original unmodified recording & natural Arabic reading',
     pitchRateBias: 1,
   },
   {
     id: 'male-gulf',
-    label: 'Gulf Male · Deep Hijazi',
-    desc: 'Deep baritone Hijazi warmth & lowered vocal register',
+    label: 'Gulf Arabic · Natural',
+    desc: 'Clean natural playback (prefers Gulf Arabic TTS voice)',
     pitchRateBias: 1,
   },
   {
     id: 'male-egypt',
-    label: 'Egyptian Male · Classical',
-    desc: 'Rich Azhari classical chest & mid vocal presence',
+    label: 'Egyptian Arabic · Natural',
+    desc: 'Clean natural playback (prefers Egyptian Arabic TTS voice)',
     pitchRateBias: 1,
   },
   {
     id: 'male-maghreb',
-    label: 'Maghrebi Voice · Crisp',
-    desc: 'Lighter tenor lift & articulate upper clarity',
+    label: 'Maghrebi Arabic · Natural',
+    desc: 'Clean natural playback (prefers Maghrebi Arabic TTS voice)',
     pitchRateBias: 1,
   },
   {
     id: 'female-warm',
-    label: 'Warm Elder Female · Gentle',
-    desc: 'Gentle elder female vocal register & soft melodic tone',
+    label: 'Female Arabic · Natural',
+    desc: 'Clean natural playback (prefers female Arabic TTS voice)',
     pitchRateBias: 1,
   },
 ];
@@ -106,307 +106,17 @@ export function stopBackgroundAudioKeepalive(): void {
   }
 }
 
-interface VoicePresetParams {
-  semitones: number;
-  preType: BiquadFilterType;
-  preFreq: number;
-  preGain: number;
-  f1Freq: number;
-  f1Gain: number;
-  f1Q: number;
-  f2Freq: number;
-  f2Gain: number;
-  f2Q: number;
-  postLpFreq: number;
-}
-
-const VOICE_DSP_PRESETS: Record<Exclude<QariVoiceProfile, 'recorded'>, VoicePresetParams> = {
-  'male-gulf': {
-    semitones: -2.6,
-    preType: 'lowshelf',
-    preFreq: 165,
-    preGain: 4.2,
-    f1Freq: 620,
-    f1Gain: 1.8,
-    f1Q: 1.0,
-    f2Freq: 2100,
-    f2Gain: -2.2,
-    f2Q: 0.9,
-    postLpFreq: 8500,
-  },
-  'male-egypt': {
-    semitones: -1.1,
-    preType: 'lowshelf',
-    preFreq: 185,
-    preGain: 1.8,
-    f1Freq: 880,
-    f1Gain: 3.8,
-    f1Q: 1.1,
-    f2Freq: 1800,
-    f2Gain: 1.4,
-    f2Q: 1.0,
-    postLpFreq: 9500,
-  },
-  'male-maghreb': {
-    semitones: 1.8,
-    preType: 'highpass',
-    preFreq: 95,
-    preGain: 0,
-    f1Freq: 1450,
-    f1Gain: 2.5,
-    f1Q: 1.0,
-    f2Freq: 2700,
-    f2Gain: 3.4,
-    f2Q: 1.0,
-    postLpFreq: 10500,
-  },
-  'female-warm': {
-    semitones: 5.0,
-    preType: 'highpass',
-    preFreq: 145,
-    preGain: 0,
-    f1Freq: 390,
-    f1Gain: 2.6,
-    f1Q: 1.1,
-    f2Freq: 1550,
-    f2Gain: 3.8,
-    f2Q: 1.0,
-    postLpFreq: 6200,
-  },
-};
-
-interface ElementVoiceDspChain {
-  ctx: AudioContext;
-  source: MediaElementAudioSourceNode;
-  dryGain: GainNode;
-  wetGain: GainNode;
-  pitchInput: GainNode;
-  delayA: DelayNode;
-  delayB: DelayNode;
-  tapAGain: GainNode;
-  tapBGain: GainNode;
-  preFilter: BiquadFilterNode;
-  formant1: BiquadFilterNode;
-  formant2: BiquadFilterNode;
-  postLp: BiquadFilterNode;
-  activeSemitones: number;
-  modSources: AudioBufferSourceNode[];
-}
-
-const elementDspMap = new WeakMap<HTMLAudioElement, ElementVoiceDspChain>();
-
-function isCorsSafeAudioSrc(audio: HTMLAudioElement, src: string): boolean {
-  if (!src) return false;
-  if (src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/')) {
-    return true;
-  }
-  if (typeof window !== 'undefined' && src.startsWith(window.location.origin)) {
-    return true;
-  }
-  return audio.crossOrigin === 'anonymous';
-}
-
-function stopPitchModulators(chain: ElementVoiceDspChain): void {
-  for (const src of chain.modSources) {
-    try {
-      src.stop();
-      src.disconnect();
-    } catch {
-      // Ignore already stopped buffer source
-    }
-  }
-  chain.modSources = [];
-}
-
-function startPitchModulators(chain: ElementVoiceDspChain, semitones: number): void {
-  if (chain.activeSemitones === semitones && chain.modSources.length > 0) {
-    return;
-  }
-  stopPitchModulators(chain);
-  chain.activeSemitones = semitones;
-
-  if (Math.abs(semitones) < 0.05) {
-    return;
-  }
-
-  const { ctx } = chain;
-  const sr = ctx.sampleRate || 48000;
-  const alpha = Math.pow(2, semitones / 12);
-  const windowSec = 0.068;
-  const baseDelaySec = 0.004;
-  const rateDelta = Math.abs(1 - alpha);
-  const cycleSec = windowSec / Math.max(0.01, rateDelta);
-  const numSamples = Math.max(256, Math.round(sr * cycleSec));
-
-  const dBufA = ctx.createBuffer(1, numSamples, sr);
-  const dBufB = ctx.createBuffer(1, numSamples, sr);
-  const gBufA = ctx.createBuffer(1, numSamples, sr);
-  const gBufB = ctx.createBuffer(1, numSamples, sr);
-
-  const dA = dBufA.getChannelData(0);
-  const dB = dBufB.getChannelData(0);
-  const gA = gBufA.getChannelData(0);
-  const gB = gBufB.getChannelData(0);
-
-  const pitchUp = alpha > 1;
-  for (let i = 0; i < numSamples; i++) {
-    const phiA = i / numSamples;
-    const phiB = (phiA + 0.5) % 1;
-    // Negative delay slope raises pitch; positive delay slope lowers pitch
-    dA[i] = baseDelaySec + windowSec * (pitchUp ? 1 - phiA : phiA);
-    dB[i] = baseDelaySec + windowSec * (pitchUp ? 1 - phiB : phiB);
-    // Raised-cosine sin^2/cos^2 crossfade has exact unity sum and reaches 0 at sawtooth reset
-    gA[i] = 0.5 * (1 - Math.cos(2 * Math.PI * phiA));
-    gB[i] = 0.5 * (1 - Math.cos(2 * Math.PI * phiB));
-  }
-
-  const makeLoop = (buf: AudioBuffer, param: AudioParam, t0: number) => {
-    const node = ctx.createBufferSource();
-    node.buffer = buf;
-    node.loop = true;
-    node.connect(param);
-    node.start(t0);
-    return node;
-  };
-
-  chain.delayA.delayTime.value = 0;
-  chain.delayB.delayTime.value = 0;
-  chain.tapAGain.gain.value = 0;
-  chain.tapBGain.gain.value = 0;
-
-  const t0 = ctx.currentTime + 0.008;
-  chain.modSources = [
-    makeLoop(dBufA, chain.delayA.delayTime, t0),
-    makeLoop(dBufB, chain.delayB.delayTime, t0),
-    makeLoop(gBufA, chain.tapAGain.gain, t0),
-    makeLoop(gBufB, chain.tapBGain.gain, t0),
-  ];
-}
-
 /**
- * Applies real-time Web Audio Jungle pitch-shifting + vocal tract formant shaping
- * to an <audio> element without altering playbackRate or audio.currentTime.
+ * Keeps recorded human and spoken Arabic <audio> completely clean and unmodified
+ * (no synthetic pitch shifting, delay-line modulation, or formant distortion).
  */
 export function applyVoiceTimbreProfile(
   audio: HTMLAudioElement | null,
-  profile: QariVoiceProfile = 'recorded'
+  _profile: QariVoiceProfile = 'recorded'
 ): void {
   if (!audio) return;
-  const existing = elementDspMap.get(audio);
-  const effectiveSrc = audio.currentSrc || audio.src || '';
-  const canProcess = isCorsSafeAudioSrc(audio, effectiveSrc);
-
-  // Keep default 'recorded' profile on native <audio> output unless DSP graph was already attached
-  if (!existing && (profile === 'recorded' || !canProcess)) {
-    return;
-  }
-
-  try {
-    let chain = existing;
-    if (!chain) {
-      const Ctor = getAudioContextCtor();
-      if (!Ctor) return;
-      const ctx = new Ctor();
-      const source = ctx.createMediaElementSource(audio);
-
-      const dryGain = ctx.createGain();
-      const wetGain = ctx.createGain();
-      const pitchInput = ctx.createGain();
-      const delayA = ctx.createDelay(0.25);
-      const delayB = ctx.createDelay(0.25);
-      const tapAGain = ctx.createGain();
-      const tapBGain = ctx.createGain();
-
-      const preFilter = ctx.createBiquadFilter();
-      const formant1 = ctx.createBiquadFilter();
-      formant1.type = 'peaking';
-      const formant2 = ctx.createBiquadFilter();
-      formant2.type = 'peaking';
-      const postLp = ctx.createBiquadFilter();
-      postLp.type = 'lowpass';
-      postLp.Q.value = 0.65;
-
-      const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -14;
-      compressor.knee.value = 12;
-      compressor.ratio.value = 3;
-      compressor.attack.value = 0.005;
-      compressor.release.value = 0.12;
-
-      // Dry path
-      source.connect(dryGain);
-      dryGain.connect(ctx.destination);
-
-      // Wet pitch-shifted + formant-shaped path
-      source.connect(pitchInput);
-      pitchInput.connect(delayA);
-      pitchInput.connect(delayB);
-      delayA.connect(tapAGain);
-      delayB.connect(tapBGain);
-      tapAGain.connect(preFilter);
-      tapBGain.connect(preFilter);
-      preFilter.connect(formant1);
-      formant1.connect(formant2);
-      formant2.connect(postLp);
-      postLp.connect(compressor);
-      compressor.connect(wetGain);
-      wetGain.connect(ctx.destination);
-
-      chain = {
-        ctx,
-        source,
-        dryGain,
-        wetGain,
-        pitchInput,
-        delayA,
-        delayB,
-        tapAGain,
-        tapBGain,
-        preFilter,
-        formant1,
-        formant2,
-        postLp,
-        activeSemitones: 0,
-        modSources: [],
-      };
-      elementDspMap.set(audio, chain);
-    }
-
-    if (chain.ctx.state === 'suspended') {
-      void chain.ctx.resume().catch(() => {});
-    }
-
-    const activeProfile: QariVoiceProfile = canProcess ? profile : 'recorded';
-    const now = chain.ctx.currentTime;
-
-    if (activeProfile === 'recorded') {
-      chain.dryGain.gain.setTargetAtTime(1, now, 0.02);
-      chain.wetGain.gain.setTargetAtTime(0, now, 0.02);
-      stopPitchModulators(chain);
-      chain.activeSemitones = 0;
-      return;
-    }
-
-    const preset = VOICE_DSP_PRESETS[activeProfile];
-    chain.preFilter.type = preset.preType;
-    chain.preFilter.frequency.setTargetAtTime(preset.preFreq, now, 0.02);
-    chain.preFilter.gain.setTargetAtTime(preset.preGain, now, 0.02);
-
-    chain.formant1.frequency.setTargetAtTime(preset.f1Freq, now, 0.02);
-    chain.formant1.gain.setTargetAtTime(preset.f1Gain, now, 0.02);
-    chain.formant1.Q.setTargetAtTime(preset.f1Q, now, 0.02);
-
-    chain.formant2.frequency.setTargetAtTime(preset.f2Freq, now, 0.02);
-    chain.formant2.gain.setTargetAtTime(preset.f2Gain, now, 0.02);
-    chain.formant2.Q.setTargetAtTime(preset.f2Q, now, 0.02);
-
-    chain.postLp.frequency.setTargetAtTime(preset.postLpFreq, now, 0.02);
-
-    startPitchModulators(chain, preset.semitones);
-    chain.dryGain.gain.setTargetAtTime(0, now, 0.02);
-    chain.wetGain.gain.setTargetAtTime(1, now, 0.02);
-  } catch {
-    // Graceful no-op on browsers restricting MediaElementAudioSourceNode
+  if ('preservesPitch' in audio) {
+    (audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true;
   }
 }
 
@@ -416,10 +126,7 @@ export function selectRegionalArabicVoice(
 ): { voice: SpeechSynthesisVoice | null; pitch: number } {
   const arVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('ar'));
   if (arVoices.length === 0) {
-    return {
-      voice: null,
-      pitch: profile === 'female-warm' ? 1.15 : profile === 'male-gulf' ? 0.88 : 1,
-    };
+    return { voice: null, pitch: 1 };
   }
 
   const pickByPatterns = (patterns: RegExp[]): SpeechSynthesisVoice | null => {
@@ -434,19 +141,19 @@ export function selectRegionalArabicVoice(
     const female = pickByPatterns([
       /hoda|salma|laila|mariam|amina|fatima|zaynab|noura|rani|female|woman/i,
     ]);
-    return { voice: female ?? arVoices[0], pitch: female ? 1.04 : 1.18 };
+    return { voice: female ?? arVoices[0], pitch: 1 };
   }
   if (profile === 'male-egypt') {
     const egypt = pickByPatterns([/ar-eg/i, /egypt|shakir|tarek|maged|hani/i]);
-    return { voice: egypt ?? arVoices[0], pitch: 0.98 };
+    return { voice: egypt ?? arVoices[0], pitch: 1 };
   }
   if (profile === 'male-maghreb') {
     const maghreb = pickByPatterns([/ar-(ma|tn|dz)/i, /morocco|tunisia|algeria/i]);
-    return { voice: maghreb ?? arVoices[0], pitch: 1.02 };
+    return { voice: maghreb ?? arVoices[0], pitch: 1 };
   }
   if (profile === 'male-gulf') {
     const gulf = pickByPatterns([/ar-(sa|ae|kw|qa|om|bh)/i, /naayf|zayed|hamdan|majed/i]);
-    return { voice: gulf ?? arVoices[0], pitch: 0.9 };
+    return { voice: gulf ?? arVoices[0], pitch: 1 };
   }
   return { voice: arVoices[0], pitch: 1 };
 }

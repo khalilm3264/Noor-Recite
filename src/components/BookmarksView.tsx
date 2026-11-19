@@ -6,20 +6,31 @@ import {
   Edit3,
   FileDown,
   FolderPlus,
+  Heart,
   Layers,
   Play,
   Search,
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { AppScreen, BookmarkCollection, BookmarkItem, RiwayahId, TranslationLanguage } from '../types/quran';
+import {
+  AppScreen,
+  BookmarkCollection,
+  BookmarkItem,
+  FavoriteItem,
+  FavoriteItemType,
+  RiwayahId,
+  TranslationLanguage,
+} from '../types/quran';
 import { TAJWEED_RULES } from '../data/tajweedRules';
 import { formatAyahByRiwayah } from '../data/qiraatData';
 import { RubElHizbBadge } from './RubElHizbIcon';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { filterFavorites } from '../utils/favorites';
 
 interface BookmarksViewProps {
   bookmarks: BookmarkItem[];
+  favorites?: FavoriteItem[];
   versesRecitedCount: number;
   dailyGoal: number;
   collections?: BookmarkCollection[];
@@ -30,13 +41,44 @@ interface BookmarksViewProps {
   lastReadInfo?: { surahId: number; surahName: string; ayahNumber: number };
   onChangeDailyGoal: (goal: number) => void;
   onJumpToVerse: (surahId: number, ayahNumber: number, autoPlay?: boolean) => void;
+  onJumpToDua?: (duaId: string, variantId?: string) => void;
+  onJumpToHadith?: (hadithId: string) => void;
+  onJumpToSalah?: (tab: 'guides' | 'steps' | 'wudu', id: string) => void;
   onRemoveBookmark: (verseKey: string) => void;
+  onRemoveFavorite?: (favoriteId: string) => void;
   onExportBookmarksPdf?: (preselectedKeys?: string[], collectionFilter?: string) => void;
   riwayah?: RiwayahId;
   maghrebiOrthography?: boolean;
 }
 
-type HubTab = 'saved' | 'collections' | 'rules';
+type HubTab = 'favorites' | 'saved' | 'collections' | 'rules';
+
+const FAVORITE_TYPE_PILLS: { id: 'all' | FavoriteItemType; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'verse', label: 'Verses' },
+  { id: 'dua', label: 'Duas & Kalimas' },
+  { id: 'hadith', label: 'Hadiths' },
+  { id: 'salah', label: 'Salah' },
+];
+
+const FAVORITE_TYPE_BADGE: Record<FavoriteItemType, { label: string; className: string }> = {
+  verse: {
+    label: 'Qur’an Verse',
+    className: 'bg-[#064E3B]/10 text-[#064E3B] dark:bg-emerald-400/15 dark:text-emerald-200',
+  },
+  dua: {
+    label: 'Dua / Kalima',
+    className: 'bg-[#D97706]/12 text-[#904D00] dark:bg-amber-400/15 dark:text-amber-300',
+  },
+  hadith: {
+    label: 'Hadith',
+    className: 'bg-[#0F766E]/12 text-[#0F766E] dark:bg-teal-400/15 dark:text-teal-200',
+  },
+  salah: {
+    label: 'Salah',
+    className: 'bg-indigo-500/10 text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-200',
+  },
+};
 
 const QUICK_JUMP_PILLS = [
   { label: 'Al-Fātiḥah 1:1', surahId: 1, ayahNumber: 1 },
@@ -47,6 +89,7 @@ const QUICK_JUMP_PILLS = [
 
 export const BookmarksView: React.FC<BookmarksViewProps> = ({
   bookmarks,
+  favorites = [],
   versesRecitedCount,
   dailyGoal,
   collections = [],
@@ -57,12 +100,19 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   lastReadInfo,
   onChangeDailyGoal,
   onJumpToVerse,
+  onJumpToDua,
+  onJumpToHadith,
+  onJumpToSalah,
   onRemoveBookmark,
+  onRemoveFavorite,
   onExportBookmarksPdf,
   riwayah = 'hafs',
   maghrebiOrthography = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<HubTab>('saved');
+  const [activeTab, setActiveTab] = useState<HubTab>(
+    favorites.length > 0 ? 'favorites' : 'saved'
+  );
+  const [favoriteTypeFilter, setFavoriteTypeFilter] = useState<'all' | FavoriteItemType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollectionFilter, setSelectedCollectionFilter] = useState<string>('all');
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
@@ -75,6 +125,11 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
   const ratio = Math.min(1, versesRecitedCount / Math.max(1, dailyGoal));
   const circumference = 2 * Math.PI * 26;
   const strokeOffset = circumference * (1 - ratio);
+
+  const filteredFavorites = useMemo(
+    () => filterFavorites(favorites, favoriteTypeFilter, searchQuery),
+    [favorites, favoriteTypeFilter, searchQuery]
+  );
 
   const filteredBookmarks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -277,14 +332,15 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
       {/* Segmented Hub Switcher */}
       <div
         role="tablist"
-        aria-label="Bookmarks hub sections"
-        className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[#064E3B]/[0.06] dark:bg-[#0A2921] border border-[#064E3B]/10 dark:border-emerald-300/15"
+        aria-label="Bookmarks and favorites hub sections"
+        className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-[#064E3B]/[0.06] dark:bg-[#0A2921] border border-[#064E3B]/10 dark:border-emerald-300/15"
       >
         {(
           [
+            { id: 'favorites', label: `Favorites (${favorites.length})` },
             { id: 'saved', label: `Saved Ayahs (${bookmarks.length})` },
             { id: 'collections', label: `Collections (${collections.length})` },
-            { id: 'rules', label: 'Tajweed & Quick Rules' },
+            { id: 'rules', label: 'Tajweed Rules' },
           ] as { id: HubTab; label: string }[]
         ).map((tab) => {
           const active = activeTab === tab.id;
@@ -295,17 +351,192 @@ export const BookmarksView: React.FC<BookmarksViewProps> = ({
               role="tab"
               aria-selected={active}
               onClick={() => setActiveTab(tab.id)}
-              className={`min-h-[38px] px-3 rounded-lg text-xs font-semibold transition-colors ${
+              className={`min-h-[38px] px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors ${
                 active
-                  ? 'bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22] shadow-xs'
+                  ? tab.id === 'favorites'
+                    ? 'bg-rose-600 text-white dark:bg-rose-500 dark:text-white shadow-xs'
+                    : 'bg-[#064E3B] text-white dark:bg-emerald-500 dark:text-[#022C22] shadow-xs'
                   : 'text-[#404944] hover:text-[#022C22] dark:text-emerald-200/80'
               }`}
             >
-              {tab.label}
+              {tab.id === 'favorites' && (
+                <Heart className={`w-3.5 h-3.5 ${active || favorites.length > 0 ? 'fill-current' : ''} ${active ? '' : 'text-rose-500 dark:text-rose-400'}`} />
+              )}
+              <span>{tab.label}</span>
             </button>
           );
         })}
       </div>
+
+      {activeTab === 'favorites' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FAVORITE_TYPE_PILLS.map((pill) => {
+              const active = favoriteTypeFilter === pill.id;
+              const count =
+                pill.id === 'all'
+                  ? favorites.length
+                  : favorites.filter((f) => f.type === pill.id).length;
+              return (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setFavoriteTypeFilter(pill.id)}
+                  className={`min-h-[34px] px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                    active
+                      ? 'bg-[#064E3B] text-[#FEF3C7] dark:bg-emerald-500 dark:text-[#022C22]'
+                      : 'bg-white dark:bg-[#0A2921] border border-[#064E3B]/12 dark:border-emerald-300/18 text-[#404944] hover:text-[#022C22] dark:text-emerald-200/85'
+                  }`}
+                >
+                  {pill.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {filteredFavorites.length === 0 ? (
+            <div className="rounded-2xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] p-12 text-center space-y-3 ayah-card-resting">
+              <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center">
+                <Heart className="w-6 h-6" />
+              </div>
+              <h2 className="text-lg font-bold text-[#022C22] dark:text-[#E6FFF4]">
+                {searchQuery.trim()
+                  ? `No favorite matches for "${searchQuery}"`
+                  : 'No Favorites Saved Yet'}
+              </h2>
+              <p className="text-sm text-[#404944] dark:text-emerald-200/80 max-w-md mx-auto">
+                Tap the heart icon on any Qur&apos;an verse, Dua or specific variation, Hadith, or Salah recitation to build your personal quick-access favorites list.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredFavorites.map((fav) => {
+                const badge = FAVORITE_TYPE_BADGE[fav.type];
+                return (
+                  <article
+                    key={fav.id}
+                    className="rounded-2xl border border-[#064E3B]/10 dark:border-emerald-300/15 bg-white dark:bg-[#0A2921] p-5 sm:p-6 ayah-card-resting space-y-3.5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#064E3B]/8 dark:border-emerald-300/10">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className={`px-2 py-0.5 rounded-full font-bold ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                          {fav.duaVariantLabel && (
+                            <span className="px-2 py-0.5 rounded-full bg-[#064E3B]/8 text-[#0F766E] dark:bg-emerald-400/12 dark:text-emerald-200 font-semibold">
+                              {fav.duaVariantLabel}
+                            </span>
+                          )}
+                          {fav.reference && (
+                            <span className="text-[#404944] dark:text-emerald-200/75 font-medium">
+                              {fav.reference}
+                            </span>
+                          )}
+                          <span className="text-[#707974] dark:text-emerald-300/60">
+                            · Saved {fav.savedAt}
+                          </span>
+                        </div>
+                        <h2 className="text-base font-bold text-[#022C22] dark:text-[#E6FFF4]">
+                          {fav.title}
+                        </h2>
+                        {fav.subtitle && (
+                          <p className="text-xs text-[#0F766E] dark:text-emerald-300/85">
+                            {fav.subtitle}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                        {fav.type === 'verse' && fav.surahId && fav.ayahNumber && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onJumpToVerse(fav.surahId!, fav.ayahNumber!, true)}
+                              className="min-h-[36px] px-3 rounded-lg bg-[#064E3B]/8 hover:bg-[#064E3B] text-[#064E3B] hover:text-white dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                            >
+                              <Play className="w-3.5 h-3.5 fill-current" />
+                              <span>Recite</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onJumpToVerse(fav.surahId!, fav.ayahNumber!, false)}
+                              className="min-h-[36px] px-3 rounded-lg border border-[#064E3B]/15 dark:border-emerald-300/20 text-xs font-semibold text-[#022C22] dark:text-[#E6FFF4] hover:bg-[#064E3B]/5 flex items-center gap-1.5 transition-colors"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>Open</span>
+                            </button>
+                          </>
+                        )}
+                        {fav.type === 'dua' && fav.duaId && onJumpToDua && (
+                          <button
+                            type="button"
+                            onClick={() => onJumpToDua(fav.duaId!, fav.duaVariantId)}
+                            className="min-h-[36px] px-3 rounded-lg bg-[#064E3B]/8 hover:bg-[#064E3B] text-[#064E3B] hover:text-white dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>Open Dua</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {fav.type === 'hadith' && fav.hadithId && onJumpToHadith && (
+                          <button
+                            type="button"
+                            onClick={() => onJumpToHadith(fav.hadithId!)}
+                            className="min-h-[36px] px-3 rounded-lg bg-[#064E3B]/8 hover:bg-[#064E3B] text-[#064E3B] hover:text-white dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>Open Hadith</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {fav.type === 'salah' && fav.salahStepId && onJumpToSalah && (
+                          <button
+                            type="button"
+                            onClick={() => onJumpToSalah(fav.salahTab ?? 'steps', fav.salahStepId!)}
+                            className="min-h-[36px] px-3 rounded-lg bg-[#064E3B]/8 hover:bg-[#064E3B] text-[#064E3B] hover:text-white dark:bg-emerald-400/12 dark:text-emerald-200 dark:hover:bg-emerald-500 dark:hover:text-[#022C22] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>Open in Salah</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onRemoveFavorite && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveFavorite(fav.id)}
+                            aria-label={`Remove ${fav.title} from favorites`}
+                            title="Remove from favorites"
+                            className="min-h-[36px] min-w-[36px] rounded-lg flex items-center justify-center text-rose-500 hover:bg-rose-500/10 dark:text-rose-400 transition-colors"
+                          >
+                            <Heart className="w-4 h-4 fill-current" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <p
+                      dir="rtl"
+                      className="font-quran-amiri text-2xl sm:text-3xl leading-[2.0] text-[#022C22] dark:text-[#E6FFF4]"
+                    >
+                      {fav.type === 'verse' && fav.verseKey
+                        ? formatAyahByRiwayah(fav.verseKey, fav.arabic, riwayah, maghrebiOrthography)
+                        : fav.arabic}
+                    </p>
+
+                    {fav.transliteration && (
+                      <p className="text-[13.5px] font-medium italic leading-relaxed text-[#0F766E] dark:text-emerald-300/90">
+                        {fav.transliteration}
+                      </p>
+                    )}
+
+                    <p className="text-sm leading-relaxed text-[#022C22]/85 dark:text-[#D0FAEA]/90">
+                      {fav.translation}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'collections' && (
         <div className="space-y-4">

@@ -2,6 +2,8 @@ import { DuaOrKalimaItem } from '../types/quran';
 import { ALTERNATES_BY_DUA_ID } from './duasPartAlternates';
 import { EXTRA_DAILY_QURANIC_ADHKAR_DUAS } from './duasPartDailyAndAdhkar';
 import { RARE_AND_NATURE_DUAS } from './duasPartRareAndNature';
+import { HISN_COMPLETE_COLLECTION_DUAS } from './duasPartHisnComplete';
+import { QURANIC_COMPLETE_DUAS } from './duasPartQuranicComplete';
 import { DUA_WORD_TIMINGS, expandWordTimings } from './duaWordTimings';
 
 const BASE_DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
@@ -570,8 +572,10 @@ const RAW_DUAS_AND_KALIMAS: DuaOrKalimaItem[] = [
       alternates: bundle.alternates,
     };
   }),
+  ...QURANIC_COMPLETE_DUAS,
   ...EXTRA_DAILY_QURANIC_ADHKAR_DUAS,
   ...RARE_AND_NATURE_DUAS,
+  ...HISN_COMPLETE_COLLECTION_DUAS,
 ];
 
 export const DUAS_AND_KALIMAS: DuaOrKalimaItem[] = RAW_DUAS_AND_KALIMAS.map((item) => {

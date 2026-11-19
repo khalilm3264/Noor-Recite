@@ -164,7 +164,8 @@ export const LexiconDrawerContent: React.FC<
       );
       utter.lang = arabicVoice?.lang || 'ar-SA';
       if (arabicVoice) utter.voice = arabicVoice;
-      utter.rate = 0.85;
+      utter.rate = 1;
+      utter.pitch = 1;
       utter.onend = () => {
         setIsTtsPlaying(false);
         setIsTtsBuffering(false);

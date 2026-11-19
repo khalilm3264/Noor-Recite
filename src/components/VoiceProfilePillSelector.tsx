@@ -12,11 +12,11 @@ interface VoiceProfilePillSelectorProps {
 }
 
 const SHORT_LABELS: Record<QariVoiceProfile, { label: string; sub: string }> = {
-  recorded: { label: 'Original Qari', sub: 'Recorded' },
-  'male-gulf': { label: 'Gulf Male', sub: 'Deep Hijazi' },
-  'male-egypt': { label: 'Egyptian Male', sub: 'Classical' },
-  'male-maghreb': { label: 'Maghrebi Voice', sub: 'Crisp' },
-  'female-warm': { label: 'Elder Female', sub: 'Warm & Gentle' },
+  recorded: { label: 'Natural Arabic', sub: 'Original' },
+  'male-gulf': { label: 'Gulf Arabic', sub: 'Natural' },
+  'male-egypt': { label: 'Egyptian Arabic', sub: 'Natural' },
+  'male-maghreb': { label: 'Maghrebi Arabic', sub: 'Natural' },
+  'female-warm': { label: 'Female Arabic', sub: 'Natural' },
 };
 
 export const VoiceProfilePillSelector: React.FC<VoiceProfilePillSelectorProps> = ({

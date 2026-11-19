@@ -1,6 +1,7 @@
 import {
   BookmarkCollection,
   BookmarkItem,
+  FavoriteItem,
   HifzSpacedItem,
   HifzWeakWord,
   KhatmahPlanState,
@@ -8,6 +9,7 @@ import {
 } from '../types/quran';
 import { RecitationHistoryEntry } from './recitationHistory';
 import { HifzProgressEvent } from './hifzProgress';
+import { isFavoriteItem } from './favorites';
 
 export const NOOR_DRIVE_FOLDER_NAME = 'Noor Recite Study';
 export const NOOR_BACKUP_MIME_HINT = 'application/json';
@@ -74,6 +76,7 @@ export interface NoorDriveBackupPayload {
   dailyGoal: number;
   bookmarks: BookmarkItem[];
   bookmarkCollections: BookmarkCollection[];
+  favorites?: FavoriteItem[];
   khatmahPlan: KhatmahPlanState;
   hifzSpacedQueue: HifzSpacedItem[];
   hifzWeakWords: HifzWeakWord[];
@@ -620,7 +623,8 @@ function isReaderSettings(value: unknown): boolean {
     (value.reflectionDelaySec === undefined || isOneOf(value.reflectionDelaySec, 0, 1, 2)) &&
     (value.wordRepeatCount === undefined || isOneOf(value.wordRepeatCount, 1, 3, 5)) &&
     (value.riwayah === undefined || value.riwayah === 'hafs' || value.riwayah === 'warsh') &&
-    (value.maghrebiOrthography === undefined || typeof value.maghrebiOrthography === 'boolean');
+    (value.maghrebiOrthography === undefined || typeof value.maghrebiOrthography === 'boolean') &&
+    (value.playAllDuaVariations === undefined || typeof value.playAllDuaVariations === 'boolean');
 }
 
 function isKhatmahSlot(value: unknown): boolean {
@@ -680,6 +684,7 @@ function isNoorBackup(value: unknown): value is NoorDriveBackupPayload {
     isArrayOf(value.bookmarkCollections, (entry) =>
       isRecord(entry) && hasStrings(entry, 'id', 'name', 'description', 'createdAt')
     ) &&
+    (value.favorites === undefined || isArrayOf(value.favorites, isFavoriteItem)) &&
     isKhatmahPlan(value.khatmahPlan) &&
     isArrayOf(value.hifzSpacedQueue, isSpacedItem) &&
     isArrayOf(value.hifzWeakWords, isWeakWord) &&

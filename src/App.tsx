@@ -7,6 +7,7 @@ import {
   BookmarkCollection,
   BookmarkItem,
   ChapterAudioData,
+  FavoriteItem,
   HifzSpacedItem,
   HifzWeakWord,
   KhatmahPlanState,
@@ -60,6 +61,13 @@ import {
   readHifzProgressEvents,
   saveHifzProgressEvents,
 } from './utils/hifzProgress';
+import {
+  formatFavoriteSavedDate,
+  getVerseFavoriteId,
+  readFavoritesFromStorage,
+  saveFavoritesToStorage,
+  toggleFavoriteItem,
+} from './utils/favorites';
 import { prefetchAllLocalQariAudio } from './utils/aiTts';
 import {
   SpeechBounds,
@@ -120,6 +128,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   readingMode: true,
   qariVoiceProfile: 'recorded',
   autoplayQueue: true,
+  playAllDuaVariations: false,
   playEntireJuz: false,
   activeJuzNumber: 1,
 };
@@ -648,6 +657,33 @@ export default function App() {
     }
   }, [bookmarkCollections]);
 
+  const [favorites, setFavorites] = useState<FavoriteItem[]>(() =>
+    readFavoritesFromStorage()
+  );
+
+  useEffect(() => {
+    saveFavoritesToStorage(favorites);
+  }, [favorites]);
+
+  const favoriteIds = useMemo(
+    () => new Set(favorites.map((item) => item.id)),
+    [favorites]
+  );
+
+  const handleToggleFavorite = useCallback((candidate: FavoriteItem) => {
+    setFavorites((prev) => toggleFavoriteItem(prev, candidate));
+  }, []);
+
+  const [duaFocusTarget, setDuaFocusTarget] = useState<{
+    duaId: string;
+    variantId?: string;
+  } | null>(null);
+  const [hadithFocusId, setHadithFocusId] = useState<string | null>(null);
+  const [salahFocusTarget, setSalahFocusTarget] = useState<{
+    tab: 'guides' | 'steps' | 'wudu';
+    id: string;
+  } | null>(null);
+
   // Google Drive Auth & Study Backup State (access token stays in memory only)
   const [driveUser, setDriveUser] = useState<User | null>(null);
   const [driveAccessToken, setDriveAccessToken] = useState<string | null>(null);
@@ -719,6 +755,7 @@ export default function App() {
       dailyGoal,
       bookmarks,
       bookmarkCollections,
+      favorites,
       khatmahPlan,
       hifzSpacedQueue,
       hifzWeakWords: weakWords,
@@ -732,6 +769,7 @@ export default function App() {
       dailyGoal,
       bookmarks,
       bookmarkCollections,
+      favorites,
       khatmahPlan,
       hifzSpacedQueue,
       weakWords,
@@ -757,6 +795,10 @@ export default function App() {
       }
       if (Array.isArray(payload.bookmarkCollections)) {
         setBookmarkCollections(payload.bookmarkCollections);
+      }
+      if (Array.isArray(payload.favorites)) {
+        setFavorites(payload.favorites);
+        saveFavoritesToStorage(payload.favorites);
       }
       if (payload.khatmahPlan) {
         setKhatmahPlan({ ...DEFAULT_KHATMAH_PLAN, ...payload.khatmahPlan });
@@ -2935,17 +2977,37 @@ export default function App() {
     });
   };
 
+  const handleToggleFavoriteAyah = (ayah: Ayah) => {
+    const localized = getLocalizedAyahTranslation(ayah);
+    handleToggleFavorite({
+      id: getVerseFavoriteId(ayah.verseKey),
+      type: 'verse',
+      title: `${activeSurah.nameSimple} · Ayah ${ayah.number}`,
+      subtitle: `${activeSurah.nameArabic} · Juz ${ayah.juz}`,
+      arabic: ayah.arabic,
+      transliteration: ayah.transliteration,
+      translation: localized.text,
+      reference: `Qur’an ${ayah.verseKey}`,
+      savedAt: formatFavoriteSavedDate(),
+      surahId: activeSurah.id,
+      ayahNumber: ayah.number,
+      verseKey: ayah.verseKey,
+    });
+  };
+
   const cardHandlersRef = useRef({
     playAyah: handlePlayAyah,
     selectWord: handleSelectWord,
     inspectAyah: handleInspectAyah,
     toggleBookmark: handleToggleBookmark,
+    toggleFavorite: handleToggleFavoriteAyah,
   });
   cardHandlersRef.current = {
     playAyah: handlePlayAyah,
     selectWord: handleSelectWord,
     inspectAyah: handleInspectAyah,
     toggleBookmark: handleToggleBookmark,
+    toggleFavorite: handleToggleFavoriteAyah,
   };
 
   const stablePlayAyah = useCallback(
@@ -2963,6 +3025,10 @@ export default function App() {
   );
   const stableToggleBookmark = useCallback(
     (ayah: Ayah) => cardHandlersRef.current.toggleBookmark(ayah),
+    []
+  );
+  const stableToggleFavoriteAyah = useCallback(
+    (ayah: Ayah) => cardHandlersRef.current.toggleFavorite(ayah),
     []
   );
 
@@ -3514,7 +3580,12 @@ export default function App() {
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode((d) => !d)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        bookmarkCount={bookmarks.length}
+        bookmarkCount={
+          bookmarks.length +
+          favorites.filter(
+            (f) => f.type !== 'verse' || !bookmarkedKeys.has(f.verseKey ?? '')
+          ).length
+        }
         isDriveConnected={Boolean(driveAccessToken && !needsDriveAuth)}
       />
 
@@ -3608,6 +3679,7 @@ export default function App() {
                     const isBookmarked = bookmarks.some(
                       (b) => b.verseKey === ayah.verseKey
                     );
+                    const isFavorited = favoriteIds.has(getVerseFavoriteId(ayah.verseKey));
                     return (
                       <AyahCard
                         key={ayah.verseKey}
@@ -3617,11 +3689,13 @@ export default function App() {
                         activeWordIndex={isAyahActive ? activeWordIndex : null}
                         selectedWordId={selectedWordId}
                         isBookmarked={isBookmarked}
+                        isFavorited={isFavorited}
                         settings={settings}
                         onPlayAyah={stablePlayAyah}
                         onSelectWord={stableSelectWord}
                         onInspectAyah={stableInspectAyah}
                         onToggleBookmark={stableToggleBookmark}
+                        onToggleFavorite={stableToggleFavoriteAyah}
                       />
                     );
                   })}
@@ -3804,6 +3878,10 @@ export default function App() {
                 selectSurah(surahId, ayahNum, true, 'reader');
               }
             }}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            initialFocusSalah={salahFocusTarget}
+            onClearFocusTarget={() => setSalahFocusTarget(null)}
           />
         )}
 
@@ -3823,6 +3901,11 @@ export default function App() {
                 autoplayQueue: settings.autoplayQueue === false,
               });
             }}
+            onTogglePlayAllVariations={() => {
+              handleApplySettingsPatch({
+                playAllDuaVariations: !settings.playAllDuaVariations,
+              });
+            }}
             onPauseReaderAudio={() => {
               clearTransitionTimer();
               if (audioRef.current) audioRef.current.pause();
@@ -3837,6 +3920,10 @@ export default function App() {
                 selectSurah(surahId, ayahNum, true, 'reader');
               }
             }}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            initialFocusTarget={duaFocusTarget}
+            onClearFocusTarget={() => setDuaFocusTarget(null)}
           />
         )}
 
@@ -3869,6 +3956,10 @@ export default function App() {
                 selectSurah(surahId, ayahNum, true, 'reader');
               }
             }}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            initialFocusHadithId={hadithFocusId}
+            onClearFocusTarget={() => setHadithFocusId(null)}
           />
         )}
 
@@ -3930,6 +4021,7 @@ export default function App() {
         {activeScreen === 'bookmarks' && (
           <BookmarksView
             bookmarks={bookmarks}
+            favorites={favorites}
             versesRecitedCount={versesRecitedCount}
             dailyGoal={dailyGoal}
             collections={bookmarkCollections}
@@ -3957,8 +4049,23 @@ export default function App() {
                 selectSurah(surahId, ayahNum, Boolean(autoPlay), 'reader');
               }
             }}
+            onJumpToDua={(duaId, variantId) => {
+              setDuaFocusTarget({ duaId, variantId });
+              setActiveScreen('duas');
+            }}
+            onJumpToHadith={(hadithId) => {
+              setHadithFocusId(hadithId);
+              setActiveScreen('hadiths');
+            }}
+            onJumpToSalah={(tab, id) => {
+              setSalahFocusTarget({ tab, id });
+              setActiveScreen('salah');
+            }}
             onRemoveBookmark={(key) =>
               setBookmarks((prev) => prev.filter((b) => b.verseKey !== key))
+            }
+            onRemoveFavorite={(favoriteId) =>
+              setFavorites((prev) => prev.filter((f) => f.id !== favoriteId))
             }
             onExportBookmarksPdf={(preselectedKeys, collectionFilter) =>
               setPdfExportState({
