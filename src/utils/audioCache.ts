@@ -1,4 +1,12 @@
+// Remote audio (CDN recitations) never changes at a given URL, so it keeps one long-lived cache.
 const AUDIO_CACHE_NAME = 'noor-audio-v1';
+// Audio bundled under /public changes in place when files are re-recorded. Its cache name carries
+// a hash of those files (computed at build time) so returning users pick up new recordings.
+declare const __LOCAL_AUDIO_VERSION__: string | undefined;
+const LOCAL_AUDIO_CACHE_PREFIX = 'noor-local-audio-';
+const LOCAL_AUDIO_CACHE_NAME = `${LOCAL_AUDIO_CACHE_PREFIX}${
+  typeof __LOCAL_AUDIO_VERSION__ === 'string' ? __LOCAL_AUDIO_VERSION__ : 'dev'
+}`;
 const MAX_CHAPTER_CACHE_BYTES = 48 * 1024 * 1024; // 48 MB cap per single chapter MP3
 const MAX_RAM_CACHE_BYTES = 120 * 1024 * 1024; // 120 MB cap for in-memory blob URLs
 
@@ -39,9 +47,49 @@ export function getCachedAudioSrc(remoteUrl: string): string {
   return remoteUrl;
 }
 
-async function openAudioCacheStorage(): Promise<Cache | null> {
+export function isLocalAudioUrl(url: string): boolean {
+  return url.startsWith('/') && !url.startsWith('//');
+}
+
+let staleLocalCleanup: Promise<void> | null = null;
+
+// Drop caches from older local-audio builds, plus local entries that older app versions stored in
+// the shared remote cache, so outdated recordings are never served again.
+function cleanupStaleLocalAudio(): Promise<void> {
+  if (!staleLocalCleanup) {
+    staleLocalCleanup = (async () => {
+      try {
+        const names = await window.caches.keys();
+        await Promise.all(
+          names
+            .filter((name) => name.startsWith(LOCAL_AUDIO_CACHE_PREFIX) && name !== LOCAL_AUDIO_CACHE_NAME)
+            .map((name) => window.caches.delete(name))
+        );
+        if (names.includes(AUDIO_CACHE_NAME)) {
+          const shared = await window.caches.open(AUDIO_CACHE_NAME);
+          const origin = window.location.origin;
+          const requests = await shared.keys();
+          await Promise.all(
+            requests
+              .filter((request) => request.url.startsWith(`${origin}/`))
+              .map((request) => shared.delete(request))
+          );
+        }
+      } catch {
+        // Cleanup is best-effort; playback still works without it.
+      }
+    })();
+  }
+  return staleLocalCleanup;
+}
+
+async function openAudioCacheStorage(remoteUrl: string): Promise<Cache | null> {
   try {
     if (typeof window !== 'undefined' && 'caches' in window) {
+      if (isLocalAudioUrl(remoteUrl)) {
+        await cleanupStaleLocalAudio();
+        return await window.caches.open(LOCAL_AUDIO_CACHE_NAME);
+      }
       return await window.caches.open(AUDIO_CACHE_NAME);
     }
   } catch {
@@ -70,7 +118,7 @@ export async function ensureAudioCached(
 
   const task = (async (): Promise<string | null> => {
     try {
-      const cache = await openAudioCacheStorage();
+      const cache = await openAudioCacheStorage(remoteUrl);
       if (cache) {
         const cachedResp = await cache.match(remoteUrl);
         if (cachedResp) {
