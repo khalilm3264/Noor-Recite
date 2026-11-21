@@ -7,7 +7,7 @@
 | Change preferences or record reading progress | Browser local storage |
 | Load additional chapters or translations | External Quran data services; some translations also use the app's AI route |
 | Play a recorded reciter | Recorded audio providers |
-| Request AI speech | Text and style go through Express to Gemini |
+| Play generated speech in study features | Pre-generated audio files bundled with the app, or the browser's own speech voices; nothing goes to Gemini |
 | Submit recitation for verification | Audio and expected passage go through Express; Gemini receives the audio and transcription instructions |
 | Load web fonts | Google Fonts |
 
