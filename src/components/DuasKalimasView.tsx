@@ -18,6 +18,7 @@ import {
 import {
   DuaCategory,
   DuaOrKalimaItem,
+  FavoriteItem,
   QariVoiceProfile,
   ReaderSettings,
   Reciter,
@@ -26,6 +27,11 @@ import {
 import { DUAS_AND_KALIMAS } from '../data/duasAndKalimas';
 import { getEveryAyahUrl } from '../data/quranData';
 import { alignPausedNarrationQueue } from '../utils/narrationQueue';
+import {
+  buildDuaFavoriteItem,
+  getDuaFavoriteId,
+  isDuaItemFavorited,
+} from '../utils/favorites';
 import { ensureAudioCached, getCachedAudioSrc } from '../utils/audioCache';
 import {
   QARI_TTS_STYLES,
@@ -63,8 +69,13 @@ interface DuasKalimasViewProps {
   onSelectLanguage: (lang: TranslationLanguage) => void;
   onSelectVoiceProfile?: (profile: QariVoiceProfile) => void;
   onToggleAutoplayQueue?: () => void;
+  onTogglePlayAllVariations?: () => void;
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
+  favoriteIds?: ReadonlySet<string>;
+  onToggleFavorite?: (item: FavoriteItem) => void;
+  initialFocusTarget?: { duaId: string; variantId?: string } | null;
+  onClearFocusTarget?: () => void;
   onSelectWorshipView?: (section: WorshipSection) => void;
 }
 
@@ -131,12 +142,29 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   onSelectLanguage,
   onSelectVoiceProfile,
   onToggleAutoplayQueue,
+  onTogglePlayAllVariations,
   onPracticeInReader,
   onPauseReaderAudio,
+  favoriteIds,
+  onToggleFavorite,
+  initialFocusTarget,
+  onClearFocusTarget,
   onSelectWorshipView,
 }) => {
   const [activeCategory, setActiveCategory] = useState<DuaTab>('all');
-  const [includeVariations, setIncludeVariations] = useState(false);
+  const [localIncludeVariations, setLocalIncludeVariations] = useState(false);
+  // When the app provides the toggle, the choice is a saved setting; otherwise it lasts for this visit.
+  const includeVariations = onTogglePlayAllVariations
+    ? settings.playAllDuaVariations === true
+    : localIncludeVariations;
+  const handleToggleIncludeVariations = () => {
+    if (onTogglePlayAllVariations) {
+      onTogglePlayAllVariations();
+    } else {
+      setLocalIncludeVariations((value) => !value);
+    }
+  };
+  const usesSharedFavorites = Boolean(favoriteIds && onToggleFavorite);
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]');
@@ -149,14 +177,56 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   });
 
   useEffect(() => {
+    if (usesSharedFavorites) return;
     try {
       localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
     } catch {
       // Favorites remain available for this session if storage is unavailable.
     }
-  }, [favorites]);
+  }, [favorites, usesSharedFavorites]);
 
-  const toggleFavorite = (id: string) => {
+  // Move favorites saved by older versions (Duas-only list) into the app-wide favorites once.
+  useEffect(() => {
+    if (!favoriteIds || !onToggleFavorite) return;
+    let legacyIds: string[] = [];
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]');
+      legacyIds = Array.isArray(saved)
+        ? [...new Set(saved.filter((id): id is string => typeof id === 'string'))]
+        : [];
+      localStorage.removeItem(FAVORITES_KEY);
+    } catch {
+      return;
+    }
+    for (const id of legacyIds) {
+      const item = DUAS_AND_KALIMAS.find((entry) => entry.id === id);
+      if (item && !isDuaItemFavorited(item, favoriteIds)) {
+        onToggleFavorite(buildDuaFavoriteItem(item));
+      }
+    }
+    setFavorites([]);
+    // Runs once on mount; later favorite changes go through onToggleFavorite directly.
+  }, []);
+
+  const isItemFavorited = useCallback(
+    (item: DuaOrKalimaItem) =>
+      favoriteIds && onToggleFavorite
+        ? isDuaItemFavorited(item, favoriteIds)
+        : favorites.includes(item.id),
+    [favoriteIds, onToggleFavorite, favorites]
+  );
+
+  const isVariantFavorited = (item: DuaOrKalimaItem, variantId: string) =>
+    favoriteIds && onToggleFavorite
+      ? favoriteIds.has(getDuaFavoriteId(item.id, variantId))
+      : favorites.includes(item.id);
+
+  const toggleFavorite = (item: DuaOrKalimaItem, variantId: string, translation?: string) => {
+    if (onToggleFavorite) {
+      onToggleFavorite(buildDuaFavoriteItem(item, variantId, translation));
+      return;
+    }
+    const id = item.id;
     setFavorites((saved) => saved.includes(id)
       ? saved.filter((favorite) => favorite !== id)
       : [...saved, id]);
@@ -165,6 +235,26 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+
+  // Kept in a ref so a new callback identity on each parent render doesn't restart the scroll timer.
+  const clearFocusTargetRef = useRef(onClearFocusTarget);
+  clearFocusTargetRef.current = onClearFocusTarget;
+
+  // Opened from a saved favorite elsewhere in the app: show that dua and narration, then scroll to it.
+  useEffect(() => {
+    if (!initialFocusTarget) return;
+    const { duaId, variantId } = initialFocusTarget;
+    setActiveCategory('all');
+    setQuery('');
+    if (variantId) {
+      setSelectedVariants((prev) => ({ ...prev, [duaId]: variantId }));
+    }
+    const timer = window.setTimeout(() => {
+      scrollTargetIntoCenter(`dua-card-${duaId}`);
+      clearFocusTargetRef.current?.();
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [initialFocusTarget]);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -304,7 +394,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
     const q = query.trim().toLowerCase();
     return DUAS_AND_KALIMAS.filter((item) => {
       if (activeCategory === 'favorites') {
-        if (!favorites.includes(item.id)) return false;
+        if (!isItemFavorited(item)) return false;
       } else if (activeCategory !== 'all' && item.category !== activeCategory) {
         return false;
       }
@@ -338,7 +428,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         )
       );
     });
-  }, [activeCategory, favorites, query, resolveDynamicText]);
+  }, [activeCategory, isItemFavorited, query, resolveDynamicText]);
 
   const narrationCount = filteredItems.reduce((total, item) => total + 1 + (item.alternates?.length ?? 0), 0);
 
@@ -1367,7 +1457,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
               tab.id === 'all'
                 ? DUAS_AND_KALIMAS.length
                 : tab.id === 'favorites'
-                  ? DUAS_AND_KALIMAS.filter((item) => favorites.includes(item.id)).length
+                  ? DUAS_AND_KALIMAS.filter((item) => isItemFavorited(item)).length
                   : DUAS_AND_KALIMAS.filter((d) => d.category === tab.id).length;
             return (
               <button
@@ -1406,7 +1496,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
             <input
               type="checkbox"
               checked={includeVariations}
-              onChange={(event) => setIncludeVariations(event.target.checked)}
+              onChange={handleToggleIncludeVariations}
               className="accent-[#064E3B] dark:accent-emerald-400"
             />
             Include all narrations
@@ -1530,7 +1620,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         <div className="space-y-4">
           {filteredItems.map((baseItem, idx) => {
             const activeVariantId = getActiveVariantId(baseItem);
-            const isFavorite = favorites.includes(baseItem.id);
+            const isFavorite = isVariantFavorited(baseItem, activeVariantId);
             const item = resolveEffectiveDuaItem(baseItem, activeVariantId);
             const count = counts[baseItem.id] ?? 0;
             const target = baseItem.recommendedCount;
@@ -1598,7 +1688,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => toggleFavorite(baseItem.id)}
+                      onClick={() => toggleFavorite(baseItem, activeVariantId, localizedTranslation)}
                       aria-label={isFavorite ? `Remove ${baseItem.title} from favorites` : `Favorite ${baseItem.title}`}
                       aria-pressed={isFavorite}
                       className="w-9 h-9 rounded-full flex items-center justify-center text-[#064E3B] hover:bg-[#064E3B]/8 dark:text-emerald-200 dark:hover:bg-emerald-400/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D97706]"

@@ -1,5 +1,5 @@
 import { WARSH_PREVIEW_NOTICE } from './data/qiraatData';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { User } from 'firebase/auth';
 import {
   AppScreen,
@@ -78,7 +78,6 @@ import {
   applyVoiceTimbreProfile,
   updateBackgroundMediaSession,
 } from './utils/useSmoothReadingPlayback';
-import { DUAS_AND_KALIMAS } from './data/duasAndKalimas';
 import { MobileBottomNav, TopNav } from './components/TopNav';
 import { SurahChips } from './components/SurahChips';
 import { SurahHeaderBanner } from './components/SurahHeaderBanner';
@@ -88,18 +87,7 @@ import { AyahCard } from './components/AyahCard';
 import { FloatingPlayerDeck } from './components/FloatingPlayerDeck';
 import { LexiconDrawer } from './components/LexiconDrawer';
 import { SettingsModal } from './components/SettingsModal';
-import { SurahIndexView } from './components/SurahIndexView';
-import { KhatmahPlannerView } from './components/KhatmahPlannerView';
-import { TopicsExplorerView } from './components/TopicsExplorerView';
-import { HifzQuizView } from './components/HifzQuizView';
-import { DuasKalimasView } from './components/DuasKalimasView';
-import { HadithsView } from './components/HadithsView';
-import { SalahView } from './components/SalahView';
-import { TajweedStudioView } from './components/TajweedStudioView';
-import { BookmarksView } from './components/BookmarksView';
-import { GoogleDriveView } from './components/GoogleDriveView';
-import { PdfExportModal } from './components/PdfExportModal';
-import { PdfExportScope } from './utils/pdfExport';
+import type { PdfExportScope } from './utils/pdfExport';
 import { NoorDriveBackupPayload } from './utils/googleDriveApi';
 import {
   clearDriveAccessToken,
@@ -107,6 +95,69 @@ import {
   googleDriveSignOut,
   initDriveAuth,
 } from './utils/googleDriveAuth';
+
+// Screens other than the reader load on first visit, which keeps their code and data
+// (duas, hadith, salah, PDF export) out of the initial download.
+const SurahIndexView = lazy(() =>
+  import('./components/SurahIndexView').then((m) => ({ default: m.SurahIndexView }))
+);
+const KhatmahPlannerView = lazy(() =>
+  import('./components/KhatmahPlannerView').then((m) => ({ default: m.KhatmahPlannerView }))
+);
+const TopicsExplorerView = lazy(() =>
+  import('./components/TopicsExplorerView').then((m) => ({ default: m.TopicsExplorerView }))
+);
+const HifzQuizView = lazy(() =>
+  import('./components/HifzQuizView').then((m) => ({ default: m.HifzQuizView }))
+);
+const DuasKalimasView = lazy(() =>
+  import('./components/DuasKalimasView').then((m) => ({ default: m.DuasKalimasView }))
+);
+const HadithsView = lazy(() =>
+  import('./components/HadithsView').then((m) => ({ default: m.HadithsView }))
+);
+const SalahView = lazy(() =>
+  import('./components/SalahView').then((m) => ({ default: m.SalahView }))
+);
+const TajweedStudioView = lazy(() =>
+  import('./components/TajweedStudioView').then((m) => ({ default: m.TajweedStudioView }))
+);
+const BookmarksView = lazy(() =>
+  import('./components/BookmarksView').then((m) => ({ default: m.BookmarksView }))
+);
+const GoogleDriveView = lazy(() =>
+  import('./components/GoogleDriveView').then((m) => ({ default: m.GoogleDriveView }))
+);
+const PdfExportModal = lazy(() =>
+  import('./components/PdfExportModal').then((m) => ({ default: m.PdfExportModal }))
+);
+
+type NetworkInformationLike = {
+  saveData?: boolean;
+  effectiveType?: string;
+  type?: string;
+};
+
+function shouldPrefetchBundledAudio(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  if (!connection) return true;
+  if (connection.saveData) return false;
+  if (connection.type === 'cellular') return false;
+  return !['slow-2g', '2g', '3g'].includes(connection.effectiveType ?? '');
+}
+
+function ScreenLoadingFallback() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center text-sm text-[#404944]/80 dark:text-emerald-200/70"
+    >
+      Loading…
+    </div>
+  );
+}
 
 const DEFAULT_SETTINGS: ReaderSettings = {
   arabicFont: 'amiri',
@@ -830,6 +881,11 @@ export default function App() {
     preselectedBookmarkKeys?: string[];
     collectionFilter?: string;
   }>({ isOpen: false, scope: 'surah' });
+  // The PDF export modal (and jsPDF) loads the first time it opens, then stays mounted.
+  const [hasOpenedPdfExport, setHasOpenedPdfExport] = useState(false);
+  if (pdfExportState.isOpen && !hasOpenedPdfExport) {
+    setHasOpenedPdfExport(true);
+  }
 
   const bookmarkedKeys = useMemo(
     () => new Set(bookmarks.map((b) => b.verseKey)),
@@ -3403,20 +3459,30 @@ export default function App() {
     }
   };
 
-  // Preload all local Qari audio assets and Kalima MP3s into CacheStorage cleanly (zero API calls)
+  // Warm the bundled Qari recordings (~7 MB) and Kalima MP3s for offline use, but only once the page
+  // is idle and only on connections where that download is cheap. Each screen still prefetches the
+  // recordings it shows, so skipping this never blocks playback.
   useEffect(() => {
+    if (!shouldPrefetchBundledAudio()) return;
     const ctrl = new AbortController();
-    const timer = window.setTimeout(() => {
+    const start = () => {
+      if (ctrl.signal.aborted) return;
       void prefetchAllLocalQariAudio(ctrl.signal);
-
-      const kalimaAndCoreUrls = DUAS_AND_KALIMAS.filter(
-        (d) => d.category === 'kalimas' && d.audioUrl
-      ).map((d) => d.audioUrl as string);
-
-      void Promise.all(
-        kalimaAndCoreUrls.map((url) => ensureAudioCached(url, ctrl.signal))
-      );
-    }, 1200);
+      void import('./data/duasAndKalimas').then(({ DUAS_AND_KALIMAS }) => {
+        if (ctrl.signal.aborted) return;
+        const kalimaUrls = DUAS_AND_KALIMAS.filter(
+          (d) => d.category === 'kalimas' && d.audioUrl
+        ).map((d) => d.audioUrl as string);
+        return Promise.all(kalimaUrls.map((url) => ensureAudioCached(url, ctrl.signal)));
+      });
+    };
+    const timer = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(start, { timeout: 10_000 });
+      } else {
+        start();
+      }
+    }, 8000);
     return () => {
       window.clearTimeout(timer);
       ctrl.abort();
@@ -3734,6 +3800,7 @@ export default function App() {
           </div>
         )}
 
+        <Suspense fallback={<ScreenLoadingFallback />}>
         {activeScreen === 'surahs' && (
           <SurahIndexView
             directory={SURAH_DIRECTORY}
@@ -4097,6 +4164,8 @@ export default function App() {
           />
         )}
 
+        </Suspense>
+
         <footer className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-2 text-center">
           <p className="text-xs text-[#404944]/80 dark:text-emerald-200/60 tracking-wide">
             &copy; 2026 Muhmmad Khalil &middot; Noor Recite. All rights reserved.
@@ -4175,6 +4244,8 @@ export default function App() {
         }}
       />
 
+      {hasOpenedPdfExport && (
+      <Suspense fallback={null}>
       <PdfExportModal
         isOpen={pdfExportState.isOpen}
         initialScope={pdfExportState.scope}
@@ -4212,6 +4283,8 @@ export default function App() {
           }))
         }
       />
+      </Suspense>
+      )}
 
       <DailyGoalReminderToast
         isVisible={showDailyReminder && versesRecitedCount === 0}
