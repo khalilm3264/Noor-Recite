@@ -67,6 +67,7 @@ import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
 import { formatFavoriteSavedDate, getSalahFavoriteId } from '../utils/favorites';
+import { WorshipSection, WorshipSubNav } from './WorshipSubNav';
 
 interface SalahViewProps {
   settings: ReaderSettings;
@@ -80,6 +81,7 @@ interface SalahViewProps {
   onToggleFavorite?: (item: FavoriteItem) => void;
   initialFocusSalah?: { tab: 'guides' | 'steps' | 'wudu'; id: string } | null;
   onClearFocusTarget?: () => void;
+  onSelectWorshipView?: (section: WorshipSection) => void;
 }
 
 type SalahTab = 'guides' | 'steps' | 'wudu';
@@ -170,6 +172,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
   onToggleFavorite,
   initialFocusSalah,
   onClearFocusTarget,
+  onSelectWorshipView,
 }) => {
   const [activeTab, setActiveTab] = useState<SalahTab>('guides');
   const [guideFilter, setGuideFilter] = useState<'all' | PrayerCategory>('all');
@@ -1507,6 +1510,10 @@ export const SalahView: React.FC<SalahViewProps> = ({
           handleTrackError();
         }}
       />
+
+      {onSelectWorshipView && (
+        <WorshipSubNav active="salah" onSelect={onSelectWorshipView} />
+      )}
 
       {/* Page Header + Inline Language & Voice Switchers */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

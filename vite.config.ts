@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react';
 import {createHash} from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {defineConfig} from 'vite';
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 // Hash of every file under public/audio. The app uses it to name its local audio cache, so
 // re-recorded files reach users who already cached the old ones.
@@ -29,11 +32,11 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      __LOCAL_AUDIO_VERSION__: JSON.stringify(hashLocalAudio(path.resolve(__dirname, 'public/audio'))),
+      __LOCAL_AUDIO_VERSION__: JSON.stringify(hashLocalAudio(path.resolve(rootDir, 'public/audio'))),
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': rootDir,
       },
     },
     server: {
