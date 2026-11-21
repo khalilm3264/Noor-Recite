@@ -4,13 +4,13 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.PORT || 3000);
+const parsedPort = Number(process.env.PORT);
+const PORT = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
 const ALLOWED_VOICES = new Set(['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']);
 
 const ai = process.env.GEMINI_API_KEY
@@ -319,9 +319,21 @@ async function startServer() {
     app.set('trust proxy', 1);
   }
   const aiPaths = ['/api/tts', '/api/grade-recitation', '/api/translate-batch'];
+  let configuredAppUrl: string | undefined;
+  const rawAppUrl = process.env.APP_URL?.trim();
+  if (rawAppUrl && rawAppUrl !== 'MY_APP_URL') {
+    try {
+      const parsedUrl = new URL(rawAppUrl);
+      if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+        configuredAppUrl = parsedUrl.origin;
+      }
+    } catch {
+      console.warn('Ignoring invalid APP_URL environment variable.');
+    }
+  }
   app.post(
     aiPaths,
-    sameOriginOnly(process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : undefined),
+    sameOriginOnly(configuredAppUrl),
     ...createAiRequestLimits(
       positiveInteger(process.env.AI_REQUESTS_PER_MINUTE, 30),
       positiveInteger(process.env.AI_REQUESTS_PER_DAY, 200),
@@ -600,7 +612,14 @@ async function startServer() {
     }
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  const distDir = path.resolve(__dirname, 'dist');
+  const hasDistBuild = fs.existsSync(path.join(distDir, 'index.html'));
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    (process.env.NODE_ENV !== 'development' && hasDistBuild);
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const disableClientWsPlugin = {
       name: 'disable-vite-client-ws',
       enforce: 'post' as const,
@@ -626,7 +645,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distDir = path.resolve(__dirname, 'dist');
     app.use(express.static(distDir));
     app.get('*', (_req, res) => {
       const indexFile = path.join(distDir, 'index.html');

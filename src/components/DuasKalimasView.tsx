@@ -55,6 +55,7 @@ import { LanguagePillSelector } from './LanguagePillSelector';
 import { VoiceProfilePillSelector } from './VoiceProfilePillSelector';
 import { useBatchTranslations } from '../utils/localizedText';
 import { getTranslationTextClass, isRtlTranslationLang } from '../utils/translationConfig';
+import { WorshipSection, WorshipSubNav } from './WorshipSubNav';
 
 interface DuasKalimasViewProps {
   settings: ReaderSettings;
@@ -64,6 +65,7 @@ interface DuasKalimasViewProps {
   onToggleAutoplayQueue?: () => void;
   onPracticeInReader: (surahId: number, ayahNumber: number) => void;
   onPauseReaderAudio?: () => void;
+  onSelectWorshipView?: (section: WorshipSection) => void;
 }
 
 type DuaTab = 'all' | 'favorites' | DuaCategory;
@@ -131,6 +133,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
   onToggleAutoplayQueue,
   onPracticeInReader,
   onPauseReaderAudio,
+  onSelectWorshipView,
 }) => {
   const [activeCategory, setActiveCategory] = useState<DuaTab>('all');
   const [includeVariations, setIncludeVariations] = useState(false);
@@ -1323,6 +1326,10 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
           handleTrackError();
         }}
       />
+
+      {onSelectWorshipView && (
+        <WorshipSubNav active="duas" onSelect={onSelectWorshipView} />
+      )}
 
       {/* Header + Inline Language & Voice Switchers */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">

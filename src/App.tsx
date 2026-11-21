@@ -674,10 +674,7 @@ export default function App() {
     setFavorites((prev) => toggleFavoriteItem(prev, candidate));
   }, []);
 
-  const [duaFocusTarget, setDuaFocusTarget] = useState<{
-    duaId: string;
-    variantId?: string;
-  } | null>(null);
+  const [lastWorshipScreen, setLastWorshipScreen] = useState<'salah' | 'duas'>('salah');
   const [hadithFocusId, setHadithFocusId] = useState<string | null>(null);
   const [salahFocusTarget, setSalahFocusTarget] = useState<{
     tab: 'guides' | 'steps' | 'wudu';
@@ -3574,6 +3571,9 @@ export default function App() {
       <TopNav
         activeScreen={activeScreen}
         onSelectScreen={(screen) => {
+          if (screen === 'salah' || screen === 'duas') {
+            setLastWorshipScreen(screen);
+          }
           setActiveScreen(screen);
           mainScrollRef.current?.scrollTo({ top: 0 });
         }}
@@ -3882,6 +3882,11 @@ export default function App() {
             onToggleFavorite={handleToggleFavorite}
             initialFocusSalah={salahFocusTarget}
             onClearFocusTarget={() => setSalahFocusTarget(null)}
+            onSelectWorshipView={(section) => {
+              setLastWorshipScreen(section);
+              setActiveScreen(section);
+              mainScrollRef.current?.scrollTo({ top: 0 });
+            }}
           />
         )}
 
@@ -3901,11 +3906,6 @@ export default function App() {
                 autoplayQueue: settings.autoplayQueue === false,
               });
             }}
-            onTogglePlayAllVariations={() => {
-              handleApplySettingsPatch({
-                playAllDuaVariations: !settings.playAllDuaVariations,
-              });
-            }}
             onPauseReaderAudio={() => {
               clearTransitionTimer();
               if (audioRef.current) audioRef.current.pause();
@@ -3920,10 +3920,11 @@ export default function App() {
                 selectSurah(surahId, ayahNum, true, 'reader');
               }
             }}
-            favoriteIds={favoriteIds}
-            onToggleFavorite={handleToggleFavorite}
-            initialFocusTarget={duaFocusTarget}
-            onClearFocusTarget={() => setDuaFocusTarget(null)}
+            onSelectWorshipView={(section) => {
+              setLastWorshipScreen(section);
+              setActiveScreen(section);
+              mainScrollRef.current?.scrollTo({ top: 0 });
+            }}
           />
         )}
 
@@ -4049,8 +4050,8 @@ export default function App() {
                 selectSurah(surahId, ayahNum, Boolean(autoPlay), 'reader');
               }
             }}
-            onJumpToDua={(duaId, variantId) => {
-              setDuaFocusTarget({ duaId, variantId });
+            onJumpToDua={() => {
+              setLastWorshipScreen('duas');
               setActiveScreen('duas');
             }}
             onJumpToHadith={(hadithId) => {
@@ -4059,6 +4060,7 @@ export default function App() {
             }}
             onJumpToSalah={(tab, id) => {
               setSalahFocusTarget({ tab, id });
+              setLastWorshipScreen('salah');
               setActiveScreen('salah');
             }}
             onRemoveBookmark={(key) =>
@@ -4139,7 +4141,11 @@ export default function App() {
       {/* Mobile Bottom Tab Bar: stacked outside <main> cleanly below Player Bar */}
       <MobileBottomNav
         activeScreen={activeScreen}
+        worshipTarget={lastWorshipScreen}
         onSelectScreen={(screen) => {
+          if (screen === 'salah' || screen === 'duas') {
+            setLastWorshipScreen(screen);
+          }
           setActiveScreen(screen);
           mainScrollRef.current?.scrollTo({ top: 0 });
         }}

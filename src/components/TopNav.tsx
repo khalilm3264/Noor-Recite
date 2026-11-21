@@ -2,10 +2,10 @@ import React from 'react';
 import {
   BookOpen,
   Bookmark,
-  HeartHandshake,
   MoonStar,
   ScrollText,
   SlidersHorizontal,
+  Sparkles,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -62,20 +62,22 @@ const DESKTOP_NAV_ITEMS: {
 const MOBILE_NAV_ITEMS: {
   id: AppScreen;
   label: string;
+  ariaLabel?: string;
   matches: AppScreen[];
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   {
     id: 'reader',
     label: "Qur'an",
-    matches: ['reader', 'surahs', 'hifz', 'topics', 'tajweed'],
+    matches: ['reader', 'surahs', 'hifz', 'topics'],
     icon: BookOpen,
   },
   {
-    id: 'duas',
-    label: 'Duas',
-    matches: ['duas'],
-    icon: HeartHandshake,
+    id: 'salah',
+    label: 'Salah·Duas',
+    ariaLabel: 'Salah and Duas',
+    matches: ['salah', 'duas'],
+    icon: MoonStar,
   },
   {
     id: 'hadiths',
@@ -84,10 +86,10 @@ const MOBILE_NAV_ITEMS: {
     icon: ScrollText,
   },
   {
-    id: 'salah',
-    label: 'Salah',
-    matches: ['salah'],
-    icon: MoonStar,
+    id: 'tajweed',
+    label: 'Tajweed',
+    matches: ['tajweed'],
+    icon: Sparkles,
   },
   {
     id: 'bookmarks',
@@ -192,11 +194,13 @@ export const TopNav: React.FC<TopNavProps> = ({
 interface MobileBottomNavProps {
   activeScreen: AppScreen;
   onSelectScreen: (screen: AppScreen) => void;
+  worshipTarget?: 'salah' | 'duas';
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeScreen,
   onSelectScreen,
+  worshipTarget = 'salah',
 }) => {
   return (
     <nav
@@ -207,12 +211,20 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         {MOBILE_NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = item.matches.includes(activeScreen);
+          const targetScreen: AppScreen =
+            item.id === 'salah'
+              ? activeScreen === 'salah' || activeScreen === 'duas'
+                ? activeScreen
+                : worshipTarget
+              : item.id;
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => onSelectScreen(item.id)}
-              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-medium transition-colors whitespace-nowrap ${
+              aria-label={item.ariaLabel ?? item.label}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => onSelectScreen(targetScreen)}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 px-0.5 text-[10.5px] font-medium transition-colors whitespace-nowrap ${
                 isActive
                   ? 'text-[#064E3B] dark:text-amber-300 font-semibold'
                   : 'text-[#404944] dark:text-emerald-200/70'
