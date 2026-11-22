@@ -181,6 +181,11 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
       ? 'font-quran-scheherazade'
       : 'font-quran-amiri';
 
+  // Kept in a ref so a new callback identity on each parent render (several times a second while
+  // Qur'an audio plays) doesn't restart the timer and keep resetting the filters.
+  const clearFocusTargetRef = useRef(onClearFocusTarget);
+  clearFocusTargetRef.current = onClearFocusTarget;
+
   useEffect(() => {
     if (!initialFocusHadithId) return;
     setActiveTradition('all');
@@ -188,10 +193,10 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
     setQuery('');
     const timer = window.setTimeout(() => {
       scrollTargetIntoCenter(`hadith-card-${initialFocusHadithId}`);
-      onClearFocusTarget?.();
+      clearFocusTargetRef.current?.();
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [initialFocusHadithId, onClearFocusTarget]);
+  }, [initialFocusHadithId]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();

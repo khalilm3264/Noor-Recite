@@ -112,3 +112,21 @@ export function createAiRequestLimits(perMinute = 30, perDay = 200): RequestHand
     }),
   ];
 }
+
+// Turn an error from an AI route into a status and a message that is safe to show users.
+// Errors this server raises on purpose (budget, busy, not configured) carry a status and a
+// user-facing message; anything else (provider or parsing failures) gets a generic message,
+// with the details kept in the server log.
+export function toAiErrorResponse(err: unknown, fallbackMessage: string): { status: number; message: string } {
+  const status =
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof (err as { status?: unknown }).status === 'number'
+      ? (err as { status: number }).status
+      : 500;
+  if (status === 429 || status === 503) {
+    return { status, message: err instanceof Error ? err.message : fallbackMessage };
+  }
+  return { status: status >= 400 && status < 500 ? status : 502, message: fallbackMessage };
+}
