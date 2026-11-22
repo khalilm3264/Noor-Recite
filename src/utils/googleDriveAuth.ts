@@ -1,12 +1,12 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  Auth,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   User,
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -24,16 +24,35 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/drive.scripts',
 ] as const;
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// The Firebase web config comes from the server (FIREBASE_* environment variables) rather than a
+// committed file. It is fetched once, when the app first sets up Drive sign-in.
+let firebasePromise: Promise<{ auth: Auth; provider: GoogleAuthProvider }> | null = null;
 
-const provider = new GoogleAuthProvider();
-for (const scope of SCOPES) {
-  provider.addScope(scope);
+function getFirebase(): Promise<{ auth: Auth; provider: GoogleAuthProvider }> {
+  if (!firebasePromise) {
+    firebasePromise = (async () => {
+      const res = await fetch('/api/firebase-config');
+      if (!res.ok) {
+        throw new Error('Google sign-in is not configured on this server.');
+      }
+      const config = (await res.json()) as Record<string, string>;
+      const app = getApps().length > 0 ? getApp() : initializeApp(config);
+      const auth = getAuth(app);
+      const provider = new GoogleAuthProvider();
+      for (const scope of SCOPES) {
+        provider.addScope(scope);
+      }
+      provider.setCustomParameters({
+        prompt: 'select_account',
+      });
+      return { auth, provider };
+    })().catch((err) => {
+      firebasePromise = null;
+      throw err;
+    });
+  }
+  return firebasePromise;
 }
-provider.setCustomParameters({
-  prompt: 'select_account',
-});
 
 // Flag indicating active popup sign-in flow so onAuthStateChanged does not reset state mid-flight.
 let isSigningIn = false;
@@ -44,19 +63,33 @@ export const initDriveAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: (existingUser: User | null) => void
 ) => {
-  return onAuthStateChanged(auth, (user: User | null) => {
-    if (user) {
-      if (cachedAccessToken) {
-        onAuthSuccess?.(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        cachedAccessToken = null;
-        onAuthFailure?.(user);
-      }
-    } else {
-      cachedAccessToken = null;
-      onAuthFailure?.(null);
-    }
-  });
+  let cancelled = false;
+  let unsubscribe: (() => void) | undefined;
+  getFirebase()
+    .then(({ auth }) => {
+      if (cancelled) return;
+      unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+        if (user) {
+          if (cachedAccessToken) {
+            onAuthSuccess?.(user, cachedAccessToken);
+          } else if (!isSigningIn) {
+            cachedAccessToken = null;
+            onAuthFailure?.(user);
+          }
+        } else {
+          cachedAccessToken = null;
+          onAuthFailure?.(null);
+        }
+      });
+    })
+    .catch(() => {
+      // Sign-in not configured or offline: Drive stays signed out.
+      if (!cancelled) onAuthFailure?.(null);
+    });
+  return () => {
+    cancelled = true;
+    unsubscribe?.();
+  };
 };
 
 export const googleDriveSignIn = async (): Promise<{
@@ -65,6 +98,7 @@ export const googleDriveSignIn = async (): Promise<{
 } | null> => {
   try {
     isSigningIn = true;
+    const { auth, provider } = await getFirebase();
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -90,5 +124,6 @@ export const clearDriveAccessToken = (): void => {
 
 export const googleDriveSignOut = async (): Promise<void> => {
   cachedAccessToken = null;
+  const { auth } = await getFirebase();
   await auth.signOut();
 };

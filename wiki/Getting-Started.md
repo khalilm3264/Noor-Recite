@@ -20,6 +20,7 @@ The host must run Express as well as serve the frontend. A static-only deploymen
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Server-side Gemini key | AI unavailable if unset |
 | `APP_URL` | Exact public origin, for example `https://recite.example.org` | Current request origin |
+| `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID` | Firebase web app config for Google Drive sign-in, served to the browser by `/api/firebase-config`. Restrict the key to your site's referrers and the Identity Toolkit API. | Drive sign-in unavailable |
 | `PORT` | Listening port | `3000` |
 | `AI_DAILY_CALL_LIMIT` | Provider attempts per process per 24 hours | `300` |
 | `AI_CONCURRENT_CALL_LIMIT` | Simultaneous provider calls | `3` |

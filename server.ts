@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from './server/aiProtection.ts';
+import { readFirebaseConfig } from './server/firebaseConfig.ts';
 import { precompressedStatic, staticCacheHeaders } from './server/staticAssets.ts';
 import express from 'express';
 import fs from 'fs';
@@ -341,6 +342,16 @@ async function startServer() {
     ),
   );
   app.use(express.json({ limit: '6mb' }));
+
+  // Public Firebase web config for Google Drive sign-in, supplied by environment variables.
+  app.get('/api/firebase-config', (_req, res) => {
+    const config = readFirebaseConfig(process.env);
+    if (!config) {
+      return res.status(404).json({ error: 'Google sign-in is not configured on this server.' });
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.json(config);
+  });
 
   app.get('/api/tts/health', (_req, res) => {
     res.json({
