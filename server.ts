@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from './server/aiProtection.ts';
+import { precompressedStatic, staticCacheHeaders } from './server/staticAssets.ts';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -645,7 +646,12 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(distDir));
+    app.use(precompressedStatic(distDir));
+    app.use(
+      express.static(distDir, {
+        setHeaders: (res, filePath) => staticCacheHeaders(res, filePath, distDir),
+      })
+    );
     app.get('*', (_req, res) => {
       const indexFile = path.join(distDir, 'index.html');
       if (fs.existsSync(indexFile)) {
