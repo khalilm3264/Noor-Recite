@@ -76,7 +76,7 @@ Bun is also supported through `bun install --frozen-lockfile`. Both npm and Bun 
 
 The basic reader starts without Gemini. Loading additional chapters, translations, recorded audio, and web fonts uses external services. Some resources may be cached after use; the app does **not** promise complete offline availability.
 
-AI-generated speech, some translation requests, and voice verification go through the Express server to Gemini. Recitation audio submitted for verification leaves the browser. Preferences and reading-progress records are stored locally in browser storage and do not provide account synchronization. See [AI and privacy](https://github.com/khalilm3264/Noor-Recite/wiki/AI-and-Privacy).
+Some translation requests and voice verification go through the Express server to Gemini. Spoken Arabic in study features plays from pre-generated audio files bundled with the app or from the browser's own speech voices, so it sends nothing to Gemini. Recitation audio submitted for verification leaves the browser. Preferences and reading-progress records are stored locally in browser storage and do not provide account synchronization. See [AI and privacy](https://github.com/khalilm3264/Noor-Recite/wiki/AI-and-Privacy).
 
 ## Practice and text-preview limits
 

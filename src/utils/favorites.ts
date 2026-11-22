@@ -1,4 +1,5 @@
-import { FavoriteItem, FavoriteItemType } from '../types/quran';
+import { DuaOrKalimaItem, FavoriteItem, FavoriteItemType } from '../types/quran';
+import { getItemVariantEntries, resolveEffectiveDuaItem } from './duaPlaybackQueue';
 
 export const FAVORITES_STORAGE_KEY = 'noor_favorites_v1';
 
@@ -8,6 +9,45 @@ export function getVerseFavoriteId(verseKey: string): string {
 
 export function getDuaFavoriteId(duaId: string, variantId = 'primary'): string {
   return `dua:${duaId}:${variantId || 'primary'}`;
+}
+
+export function buildDuaFavoriteItem(
+  item: DuaOrKalimaItem,
+  variantId = 'primary',
+  translation?: string,
+  savedAt = formatFavoriteSavedDate()
+): FavoriteItem {
+  const effectiveVariantId =
+    variantId !== 'primary' && item.alternates?.some((alt) => alt.id === variantId)
+      ? variantId
+      : 'primary';
+  const effective = resolveEffectiveDuaItem(item, effectiveVariantId);
+  const hasVariants = (item.alternates?.length ?? 0) > 0;
+  const variantLabel = hasVariants
+    ? getItemVariantEntries(item).find((entry) => entry.variantId === effectiveVariantId)?.variantLabel
+    : undefined;
+  return {
+    id: getDuaFavoriteId(item.id, effectiveVariantId),
+    type: 'dua',
+    title: item.title,
+    subtitle: item.subtitle,
+    arabic: effective.arabic,
+    transliteration: effective.transliteration,
+    translation: translation?.trim() || effective.translationEn,
+    reference: effective.reference,
+    savedAt,
+    duaId: item.id,
+    duaVariantId: effectiveVariantId,
+    ...(variantLabel ? { duaVariantLabel: variantLabel } : {}),
+  };
+}
+
+export function isDuaItemFavorited(
+  item: DuaOrKalimaItem,
+  favoriteIds: ReadonlySet<string>
+): boolean {
+  if (favoriteIds.has(getDuaFavoriteId(item.id))) return true;
+  return (item.alternates ?? []).some((alt) => favoriteIds.has(getDuaFavoriteId(item.id, alt.id)));
 }
 
 export function getHadithFavoriteId(hadithId: string): string {

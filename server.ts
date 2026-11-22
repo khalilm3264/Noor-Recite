@@ -12,7 +12,6 @@ const __dirname = path.dirname(__filename);
 
 const parsedPort = Number(process.env.PORT);
 const PORT = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
-const ALLOWED_VOICES = new Set(['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']);
 
 const ai = process.env.GEMINI_API_KEY
   ? new GoogleGenAI({
@@ -37,21 +36,8 @@ function generateAiContent(request: Parameters<GoogleGenAI['models']['generateCo
   return aiCallBudget.run(() => ai.models.generateContent(request));
 }
 
-const ttsCache = new Map<string, Buffer>();
-const MAX_CACHE_ENTRIES = 120;
-
 const translationCache = new Map<string, string>();
 const MAX_TRANSLATION_CACHE = 800;
-
-function setCachedAudio(key: string, buffer: Buffer) {
-  if (ttsCache.has(key)) {
-    ttsCache.delete(key);
-  } else if (ttsCache.size >= MAX_CACHE_ENTRIES) {
-    const oldestKey = ttsCache.keys().next().value;
-    if (oldestKey) ttsCache.delete(oldestKey);
-  }
-  ttsCache.set(key, buffer);
-}
 
 function setCachedTranslation(key: string, value: string) {
   if (translationCache.has(key)) {
@@ -237,80 +223,6 @@ const TARGET_LANGUAGE_INSTRUCTIONS: Record<string, string> = {
   fr: 'French (Français) in clear, reverent Islamic scholarly phrasing.',
 };
 
-async function synthesizeAudioWithRetry(
-  text: string,
-  voiceName: string,
-  style: string,
-  maxRetries = 2
-): Promise<Buffer> {
-  if (!ai) {
-    throw Object.assign(new Error('Speech synthesis service is not configured.'), {
-      status: 503,
-    });
-  }
-
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await generateAiContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text,
-                speechMetadata: { style },
-              },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName,
-              },
-            },
-          },
-        },
-      });
-
-      const parts = response.candidates?.[0]?.content?.parts ?? [];
-      const audioPart = parts.find((part) => part.inlineData?.data);
-      const base64Audio = audioPart?.inlineData?.data;
-
-      if (!base64Audio) {
-        throw Object.assign(new Error('No audio returned by synthesis model.'), {
-          status: 502,
-        });
-      }
-
-      return Buffer.from(base64Audio, 'base64');
-    } catch (err: unknown) {
-      lastError = err;
-      const status =
-        typeof err === 'object' &&
-        err !== null &&
-        'status' in err &&
-        typeof (err as { status?: unknown }).status === 'number'
-          ? (err as { status: number }).status
-          : 500;
-      const isTransient = !(err instanceof Error && err.message.startsWith('The daily AI allowance')) &&
-        !(err instanceof Error && err.message.startsWith('AI services are busy')) &&
-        (status === 429 || status >= 500);
-      if (!isTransient || attempt === maxRetries) {
-        throw err;
-      }
-      const delayMs = 350 * Math.pow(2.5, attempt);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-
-  throw lastError;
-}
-
 async function startServer() {
   const app = express();
   // Trust explicitly configured proxy CIDRs, or the single reverse-proxy hop in Cloud Run / hosted environments.
@@ -319,7 +231,7 @@ async function startServer() {
   } else {
     app.set('trust proxy', 1);
   }
-  const aiPaths = ['/api/tts', '/api/grade-recitation', '/api/translate-batch'];
+  const aiPaths = ['/api/grade-recitation', '/api/translate-batch'];
   let configuredAppUrl: string | undefined;
   const rawAppUrl = process.env.APP_URL?.trim();
   if (rawAppUrl && rawAppUrl !== 'MY_APP_URL') {
@@ -341,73 +253,6 @@ async function startServer() {
     ),
   );
   app.use(express.json({ limit: '6mb' }));
-
-  app.get('/api/tts/health', (_req, res) => {
-    res.json({
-      ok: Boolean(ai),
-      model: 'gemini-3.8-flash-lite-tts',
-      voices: Array.from(ALLOWED_VOICES),
-    });
-  });
-
-  app.post('/api/tts', async (req, res) => {
-    try {
-      const rawText = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-      if (!rawText) {
-        return res.status(400).json({ error: 'Text is required for speech synthesis.' });
-      }
-      if (rawText.length > 3500) {
-        return res.status(400).json({ error: 'Text exceeds maximum TTS length.' });
-      }
-
-      if (!ai) {
-        return res.status(503).json({
-          error: 'Speech synthesis service is not configured.',
-        });
-      }
-
-      const requestedVoice =
-        typeof req.body?.voiceName === 'string' && ALLOWED_VOICES.has(req.body.voiceName)
-          ? req.body.voiceName
-          : 'Charon';
-
-      const style =
-        typeof req.body?.style === 'string' && req.body.style.trim()
-          ? req.body.style.trim().slice(0, 200)
-          : 'calm, reverent, clear classical Arabic Qari articulation with gentle measured pacing';
-
-      const cacheKey = `${requestedVoice}::${style}::${rawText}`;
-      const cached = ttsCache.get(cacheKey);
-      if (cached) {
-        ttsCache.delete(cacheKey);
-        ttsCache.set(cacheKey, cached);
-        res.setHeader('Content-Type', 'audio/wav');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        return res.send(cached);
-      }
-
-      const wavBuffer = await synthesizeAudioWithRetry(rawText, requestedVoice, style);
-      setCachedAudio(cacheKey, wavBuffer);
-
-      res.setHeader('Content-Type', 'audio/wav');
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.send(wavBuffer);
-    } catch (err: unknown) {
-      const status =
-        typeof err === 'object' &&
-        err !== null &&
-        'status' in err &&
-        typeof (err as { status?: unknown }).status === 'number'
-          ? (err as { status: number }).status
-          : 500;
-      const message =
-        err instanceof Error ? err.message : 'Failed to synthesize Arabic voice.';
-      console.error('TTS error:', status, message);
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: message,
-      });
-    }
-  });
 
   // Strict spoken-word verification for the Voice Grader & Tajweed Self-Test
   app.post('/api/grade-recitation', async (req, res) => {

@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FavoriteItem } from '../src/types/quran';
+import { DUAS_AND_KALIMAS } from '../src/data/duasAndKalimas';
 import {
+  buildDuaFavoriteItem,
   filterFavorites,
   getDuaFavoriteId,
   getHadithFavoriteId,
   getSalahFavoriteId,
   getVerseFavoriteId,
+  isDuaItemFavorited,
   isFavoriteItem,
   toggleFavoriteItem,
 } from '../src/utils/favorites';
@@ -156,4 +159,32 @@ test('isFavoriteItem and Drive backup parser validate optional favorites safely'
     ),
     null
   );
+});
+
+test('buildDuaFavoriteItem saves the chosen narration and isDuaItemFavorited finds any variant', () => {
+  const item = DUAS_AND_KALIMAS.find((entry) => (entry.alternates?.length ?? 0) > 0);
+  assert.ok(item, 'expected at least one dua with alternate narrations');
+  const alt = item.alternates![0];
+
+  const primary = buildDuaFavoriteItem(item, 'primary', undefined, 'Nov 21');
+  assert.equal(primary.id, getDuaFavoriteId(item.id));
+  assert.equal(primary.type, 'dua');
+  assert.equal(primary.duaId, item.id);
+  assert.equal(primary.duaVariantId, 'primary');
+  assert.equal(primary.arabic, item.arabic);
+  assert.equal(primary.translation, item.translationEn);
+  assert.ok(isFavoriteItem(primary));
+
+  const variant = buildDuaFavoriteItem(item, alt.id, '  Localized text  ', 'Nov 21');
+  assert.equal(variant.id, getDuaFavoriteId(item.id, alt.id));
+  assert.equal(variant.arabic, alt.arabic);
+  assert.equal(variant.duaVariantLabel, alt.label);
+  assert.equal(variant.translation, 'Localized text');
+
+  const unknown = buildDuaFavoriteItem(item, 'no-such-variant', undefined, 'Nov 21');
+  assert.equal(unknown.duaVariantId, 'primary');
+
+  assert.equal(isDuaItemFavorited(item, new Set()), false);
+  assert.equal(isDuaItemFavorited(item, new Set([variant.id])), true);
+  assert.equal(isDuaItemFavorited(item, new Set([primary.id])), true);
 });
