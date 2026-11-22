@@ -1,6 +1,6 @@
 import { WARSH_PREVIEW_NOTICE } from './data/qiraatData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { User } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import {
   AppScreen,
   Ayah,
@@ -101,12 +101,20 @@ import { GoogleDriveView } from './components/GoogleDriveView';
 import { PdfExportModal } from './components/PdfExportModal';
 import { PdfExportScope } from './utils/pdfExport';
 import { NoorDriveBackupPayload } from './utils/googleDriveApi';
-import {
-  clearDriveAccessToken,
-  googleDriveSignIn,
-  googleDriveSignOut,
-  initDriveAuth,
-} from './utils/googleDriveAuth';
+
+// Firebase is only needed for Google Drive sign-in, so it loads after the page settles (or when
+// someone signs in) instead of in the initial bundle.
+type DriveAuthModule = typeof import('./utils/googleDriveAuth');
+let driveAuthModulePromise: Promise<DriveAuthModule> | null = null;
+function loadDriveAuth(): Promise<DriveAuthModule> {
+  if (!driveAuthModulePromise) {
+    driveAuthModulePromise = import('./utils/googleDriveAuth').catch((err) => {
+      driveAuthModulePromise = null;
+      throw err;
+    });
+  }
+  return driveAuthModulePromise;
+}
 
 const DEFAULT_SETTINGS: ReaderSettings = {
   arabicFont: 'amiri',
@@ -689,26 +697,49 @@ export default function App() {
   const [driveAuthError, setDriveAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = initDriveAuth(
-      (user, token) => {
-        setDriveUser(user);
-        setDriveAccessToken(token);
-        setNeedsDriveAuth(false);
-        setDriveAuthError(null);
-      },
-      (existingUser) => {
-        setDriveUser(existingUser);
-        setDriveAccessToken(null);
-        setNeedsDriveAuth(true);
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    const start = () => {
+      loadDriveAuth()
+        .then(({ initDriveAuth }) => {
+          if (cancelled) return;
+          unsubscribe = initDriveAuth(
+            (user, token) => {
+              setDriveUser(user);
+              setDriveAccessToken(token);
+              setNeedsDriveAuth(false);
+              setDriveAuthError(null);
+            },
+            (existingUser) => {
+              setDriveUser(existingUser);
+              setDriveAccessToken(null);
+              setNeedsDriveAuth(true);
+            }
+          );
+        })
+        .catch(() => {
+          // Offline or blocked: Drive stays signed out until the person tries to sign in.
+        });
+    };
+    const timer = window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(start, { timeout: 5000 });
+      } else {
+        start();
       }
-    );
-    return () => unsubscribe();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      unsubscribe?.();
+    };
   }, []);
 
   const handleDriveSignIn = useCallback(async () => {
     setIsDriveSigningIn(true);
     setDriveAuthError(null);
     try {
+      const { googleDriveSignIn } = await loadDriveAuth();
       const result = await googleDriveSignIn();
       if (result) {
         setDriveUser(result.user);
@@ -728,12 +759,13 @@ export default function App() {
   }, []);
 
   const handleDriveTokenExpired = useCallback(() => {
-    clearDriveAccessToken();
+    void loadDriveAuth().then(({ clearDriveAccessToken }) => clearDriveAccessToken());
     setDriveAccessToken(null);
     setNeedsDriveAuth(true);
   }, []);
 
   const handleDriveSignOut = useCallback(async () => {
+    const { googleDriveSignOut } = await loadDriveAuth();
     await googleDriveSignOut();
     setDriveUser(null);
     setDriveAccessToken(null);
