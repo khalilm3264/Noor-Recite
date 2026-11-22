@@ -72,6 +72,12 @@ To enable AI features, edit `.env` and set `GEMINI_API_KEY` to your own server-s
 
 Bun is also supported through `bun install --frozen-lockfile`. Both npm and Bun lockfiles are tracked.
 
+### Google Drive backups
+
+The optional Google sign-in requests per-file Drive access. Noor Recite lists the files it can access in the **Noor Recite Study** folder for backups, journal exports, and study-file uploads. Keep backups in that folder so they appear in the restore list. To import a backup from elsewhere, download it from Drive and upload it through Noor Recite's Files tab.
+
+For your own deployment, enable Google sign-in in Firebase, authorize your site origin, enable the Google Drive API, and configure the OAuth consent screen for `drive.file`.
+
 ## What needs a connection?
 
 The basic reader starts without Gemini. Loading additional chapters, translations, recorded audio, and web fonts uses external services. Some resources may be cached after use; the app does **not** promise complete offline availability.
