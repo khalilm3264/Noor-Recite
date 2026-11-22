@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from './server/aiProtection.ts';
+import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly, toAiErrorResponse } from './server/aiProtection.ts';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -485,19 +485,9 @@ async function startServer() {
       const result = evaluateSpokenTranscript(transcript, expectedArabic, expectedWords);
       return res.json(result);
     } catch (err: unknown) {
-      const status =
-        typeof err === 'object' &&
-        err !== null &&
-        'status' in err &&
-        typeof (err as { status?: unknown }).status === 'number'
-          ? (err as { status: number }).status
-          : 500;
-      const message =
-        err instanceof Error ? err.message : 'Unable to evaluate spoken audio.';
-      console.error('Recitation grade error:', status, message);
-      return res.status(status >= 400 && status < 600 ? status : 500).json({
-        error: message,
-      });
+      console.error('Recitation grade error:', err instanceof Error ? err.message : err);
+      const { status, message } = toAiErrorResponse(err, 'Unable to evaluate spoken audio.');
+      return res.status(status).json({ error: message });
     }
   });
 
@@ -605,10 +595,9 @@ async function startServer() {
 
       return res.json({ translations: resolved });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Batch translation failed.';
-      console.error('Translate batch error:', message);
-      return res.status(500).json({ error: message });
+      console.error('Translate batch error:', err instanceof Error ? err.message : err);
+      const { status, message } = toAiErrorResponse(err, 'Batch translation failed.');
+      return res.status(status).json({ error: message });
     }
   });
 

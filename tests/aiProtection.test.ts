@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { once } from 'node:events';
-import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from '../server/aiProtection.ts';
+import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly, toAiErrorResponse } from '../server/aiProtection.ts';
 
 const throttled = (error: unknown) => (error as { status: number }).status === 429;
 
@@ -74,4 +74,20 @@ test('HTTP limits isolate per-client IPs from Forwarded and X-Forwarded-For when
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+test('toAiErrorResponse keeps budget messages and hides provider details', () => {
+  const busy = Object.assign(new Error('AI services are busy. Please try again shortly.'), { status: 429 });
+  assert.deepEqual(toAiErrorResponse(busy, 'fallback'), { status: 429, message: busy.message });
+
+  const notConfigured = Object.assign(new Error('AI service is not configured.'), { status: 503 });
+  assert.deepEqual(toAiErrorResponse(notConfigured, 'fallback'), { status: 503, message: notConfigured.message });
+
+  const provider = Object.assign(new Error('INTERNAL: upstream stack trace with key=abc'), { status: 500 });
+  assert.deepEqual(toAiErrorResponse(provider, 'Batch translation failed.'), { status: 502, message: 'Batch translation failed.' });
+
+  const badRequest = Object.assign(new Error('Invalid audio payload from provider'), { status: 400 });
+  assert.deepEqual(toAiErrorResponse(badRequest, 'fallback'), { status: 400, message: 'fallback' });
+
+  assert.deepEqual(toAiErrorResponse(new SyntaxError('Unexpected token'), 'fallback'), { status: 502, message: 'fallback' });
 });

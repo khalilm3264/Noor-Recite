@@ -179,6 +179,11 @@ export const SalahView: React.FC<SalahViewProps> = ({
   const [query, setQuery] = useState('');
   const [tasbihTotal, setTasbihTotal] = useState(0);
 
+  // Kept in a ref so a new callback identity on each parent render (several times a second while
+  // Qur'an audio plays) doesn't restart the timer and keep resetting the filters.
+  const clearFocusTargetRef = useRef(onClearFocusTarget);
+  clearFocusTargetRef.current = onClearFocusTarget;
+
   useEffect(() => {
     if (!initialFocusSalah) return;
     setActiveTab(initialFocusSalah.tab);
@@ -192,10 +197,10 @@ export const SalahView: React.FC<SalahViewProps> = ({
         : `salah-guide-${initialFocusSalah.id}`;
     const timer = window.setTimeout(() => {
       scrollTargetIntoCenter(elId);
-      onClearFocusTarget?.();
+      clearFocusTargetRef.current?.();
     }, 100);
     return () => window.clearTimeout(timer);
-  }, [initialFocusSalah, onClearFocusTarget]);
+  }, [initialFocusSalah]);
 
   // Audio playback state shared cleanly across all Salah recitations
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
