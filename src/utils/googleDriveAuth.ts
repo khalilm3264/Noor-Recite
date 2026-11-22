@@ -7,6 +7,7 @@ import {
   signInWithPopup,
   User,
 } from 'firebase/auth';
+import { firebaseConfigFromEnv, parseFirebaseConfig, type FirebaseWebConfig } from './firebaseWebConfig';
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -24,18 +25,31 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/drive.scripts',
 ] as const;
 
-// The Firebase web config comes from the server (FIREBASE_* environment variables) rather than a
-// committed file. It is fetched once, when the app first sets up Drive sign-in.
+// The Firebase web config is never committed. It comes from VITE_FIREBASE_* variables baked in at
+// build time (works on static hosts), or else from the Express route /api/firebase-config. It is
+// resolved once, when the app first sets up Drive sign-in.
 let firebasePromise: Promise<{ auth: Auth; provider: GoogleAuthProvider }> | null = null;
+
+const NOT_CONFIGURED = 'Google sign-in is not configured for this site.';
+
+async function loadFirebaseConfig(): Promise<FirebaseWebConfig> {
+  const buildTime = firebaseConfigFromEnv(import.meta.env, ['VITE_FIREBASE_']);
+  if (buildTime) return buildTime;
+  const res = await fetch('/api/firebase-config', { headers: { Accept: 'application/json' } });
+  // A static host may answer unknown paths with index.html (200, text/html), so check the type.
+  const type = res.headers.get('content-type') ?? '';
+  if (!res.ok || !type.includes('application/json')) {
+    throw new Error(NOT_CONFIGURED);
+  }
+  const config = parseFirebaseConfig(await res.json().catch(() => null));
+  if (!config) throw new Error(NOT_CONFIGURED);
+  return config;
+}
 
 function getFirebase(): Promise<{ auth: Auth; provider: GoogleAuthProvider }> {
   if (!firebasePromise) {
     firebasePromise = (async () => {
-      const res = await fetch('/api/firebase-config');
-      if (!res.ok) {
-        throw new Error('Google sign-in is not configured on this server.');
-      }
-      const config = (await res.json()) as Record<string, string>;
+      const config = await loadFirebaseConfig();
       const app = getApps().length > 0 ? getApp() : initializeApp(config);
       const auth = getAuth(app);
       const provider = new GoogleAuthProvider();

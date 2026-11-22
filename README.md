@@ -94,7 +94,7 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-In PowerShell, set `$env:NODE_ENV='production'` before `npm start`. Set `APP_URL` to the exact public origin and provide `GEMINI_API_KEY` as a server-side secret. For Google Drive sign-in, also set the `FIREBASE_*` variables listed in `.env.example`. The host must run the Express server; a static-only host does not provide the `/api/*` routes. Microphone recording requires HTTPS or localhost.
+In PowerShell, set `$env:NODE_ENV='production'` before `npm start`. Set `APP_URL` to the exact public origin and provide `GEMINI_API_KEY` as a server-side secret. For Google Drive sign-in, set the `VITE_FIREBASE_*` variables listed in `.env.example` in the build environment (they are baked into the bundle, so sign-in also works on a static host); the Express server additionally serves them from `/api/firebase-config`. The AI features need the Express server; a static-only host does not provide the `/api/*` routes. Microphone recording requires HTTPS or localhost.
 
 AI endpoints have per-client request limits, cross-site browser checks, and a shared provider-call budget. Defaults are **30 requests/minute**, **200 requests/day per client**, **300 provider attempts per 24 hours**, and **3 simultaneous provider calls**. Retries and fallbacks consume the budget. These counters are **per process**, reset on restart, and are not authentication or a provider billing limit. Configure provider-side quotas too; multiple replicas require shared enforcement.
 
