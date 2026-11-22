@@ -726,6 +726,11 @@ export default function App() {
   }, []);
 
   const [lastWorshipScreen, setLastWorshipScreen] = useState<'salah' | 'duas'>('salah');
+  const [duaFocusTarget, setDuaFocusTarget] = useState<{
+    duaId: string;
+    variantId?: string;
+  } | null>(null);
+  const clearDuaFocusTarget = useCallback(() => setDuaFocusTarget(null), []);
   const [hadithFocusId, setHadithFocusId] = useState<string | null>(null);
   const [salahFocusTarget, setSalahFocusTarget] = useState<{
     tab: 'guides' | 'steps' | 'wudu';
@@ -3987,6 +3992,15 @@ export default function App() {
                 selectSurah(surahId, ayahNum, true, 'reader');
               }
             }}
+            onTogglePlayAllVariations={() => {
+              handleApplySettingsPatch({
+                playAllDuaVariations: !settings.playAllDuaVariations,
+              });
+            }}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            initialFocusTarget={duaFocusTarget}
+            onClearFocusTarget={clearDuaFocusTarget}
             onSelectWorshipView={(section) => {
               setLastWorshipScreen(section);
               setActiveScreen(section);
@@ -4117,7 +4131,8 @@ export default function App() {
                 selectSurah(surahId, ayahNum, Boolean(autoPlay), 'reader');
               }
             }}
-            onJumpToDua={() => {
+            onJumpToDua={(duaId, variantId) => {
+              setDuaFocusTarget({ duaId, variantId });
               setLastWorshipScreen('duas');
               setActiveScreen('duas');
             }}
