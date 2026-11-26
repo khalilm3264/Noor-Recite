@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TranslationLanguage } from '../types/quran';
+import { translationContentKey } from './translationCacheKey';
 
 export interface TranslatableEntry {
   key: string;
@@ -7,7 +8,7 @@ export interface TranslatableEntry {
   arabic?: string;
 }
 
-const STORAGE_KEY_PREFIX = 'noor_tr_cache_v1_';
+const STORAGE_KEY_PREFIX = 'noor_tr_cache_v2_';
 const memoryCache = new Map<string, string>();
 const loadedLangs = new Set<string>();
 const inflightRequests = new Map<string, Promise<void>>();
@@ -51,11 +52,12 @@ function persistLangCache(lang: TranslationLanguage) {
 
 export function getCachedLocalizedText(
   lang: TranslationLanguage,
-  sourceText: string
+  sourceText: string,
+  arabicContext?: string
 ): string | null {
   if (lang === 'en' || !sourceText.trim()) return sourceText;
   loadLangCache(lang);
-  return memoryCache.get(`${lang}::${sourceText.trim()}`) ?? null;
+  return memoryCache.get(`${lang}::${translationContentKey(sourceText, arabicContext)}`) ?? null;
 }
 
 export async function translateTextsBatch(
@@ -71,7 +73,7 @@ export async function translateTextsBatch(
   for (const item of items) {
     const trimmed = item.text.trim();
     if (!trimmed) continue;
-    const cached = memoryCache.get(`${targetLang}::${trimmed}`);
+    const cached = getCachedLocalizedText(targetLang, trimmed, item.arabic);
     if (cached) {
       out[item.id] = cached;
     } else {
@@ -85,9 +87,12 @@ export async function translateTextsBatch(
   for (let i = 0; i < missing.length; i += CHUNK_SIZE) {
     if (signal?.aborted) break;
     const chunk = missing.slice(i, i + CHUNK_SIZE);
-    const sigKey = `${targetLang}::${chunk.map((c) => c.id).join(',')}`;
+    const sigKey = JSON.stringify([targetLang, chunk.map((item) =>
+      [item.id, translationContentKey(item.text, item.arabic)]
+    )]);
 
-    let job = inflightRequests.get(sigKey);
+    // A component can cancel its own request without cancelling another view's request.
+    let job = signal ? undefined : inflightRequests.get(sigKey);
     if (!job) {
       job = (async () => {
         const res = await fetch('/api/translate-batch', {
@@ -103,20 +108,20 @@ export async function translateTextsBatch(
           translations?: Record<string, string>;
         };
         const returned = json.translations ?? {};
-        const byId = new Map(chunk.map((c) => [c.id, c.text]));
+        const byId = new Map(chunk.map((item) => [item.id, item]));
         for (const [id, translated] of Object.entries(returned)) {
           if (typeof translated === 'string' && translated.trim()) {
             const orig = byId.get(id);
             if (orig) {
-              memoryCache.set(`${targetLang}::${orig}`, translated.trim());
+              memoryCache.set(`${targetLang}::${translationContentKey(orig.text, orig.arabic)}`, translated.trim());
             }
           }
         }
         persistLangCache(targetLang);
       })().finally(() => {
-        inflightRequests.delete(sigKey);
+        if (!signal) inflightRequests.delete(sigKey);
       });
-      inflightRequests.set(sigKey, job);
+      if (!signal) inflightRequests.set(sigKey, job);
     }
 
     try {
@@ -126,7 +131,7 @@ export async function translateTextsBatch(
     }
 
     for (const c of chunk) {
-      const hit = memoryCache.get(`${targetLang}::${c.text}`);
+      const hit = getCachedLocalizedText(targetLang, c.text, c.arabic);
       if (hit) {
         out[c.id] = hit;
       }
@@ -153,22 +158,11 @@ export function useBatchTranslations(
   lang: TranslationLanguage,
   entries: TranslatableEntry[]
 ): {
-  resolve: (fallbackText: string) => string;
+  resolve: (fallbackText: string, arabicContext?: string) => string;
   isTranslating: boolean;
 } {
   const [tick, setTick] = useState(0);
   const [isTranslating, setIsTranslating] = useState(false);
-
-  const signature = useMemo(
-    () =>
-      DYNAMIC_LANGS.has(lang)
-        ? `${lang}:${entries.length}:${entries
-            .slice(0, 6)
-            .map((e) => e.key)
-            .join('|')}`
-        : lang,
-    [lang, entries]
-  );
 
   useEffect(() => {
     if (!DYNAMIC_LANGS.has(lang) || entries.length === 0) {
@@ -177,10 +171,9 @@ export function useBatchTranslations(
     }
 
     loadLangCache(lang);
-    const missing = entries.filter((e) => {
-      const t = e.text.trim();
-      return t.length > 0 && !memoryCache.has(`${lang}::${t}`);
-    });
+    const missing = entries.filter((entry) =>
+      entry.text.trim() && !getCachedLocalizedText(lang, entry.text, entry.arabic)
+    );
 
     if (missing.length === 0) {
       setIsTranslating(false);
@@ -207,13 +200,13 @@ export function useBatchTranslations(
       });
 
     return () => ctrl.abort();
-  }, [signature, lang, entries]);
+  }, [lang, entries]);
 
   const resolve = useMemo(() => {
     void tick;
-    return (fallbackText: string): string => {
+    return (fallbackText: string, arabicContext?: string): string => {
       if (!DYNAMIC_LANGS.has(lang) || !fallbackText.trim()) return fallbackText;
-      return getCachedLocalizedText(lang, fallbackText) ?? fallbackText;
+      return getCachedLocalizedText(lang, fallbackText, arabicContext) ?? fallbackText;
     };
   }, [lang, tick]);
 

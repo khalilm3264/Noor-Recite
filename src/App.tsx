@@ -1,5 +1,5 @@
 import { WARSH_PREVIEW_NOTICE } from './data/qiraatData';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from 'firebase/auth';
 import {
   AppScreen,
@@ -39,7 +39,6 @@ import {
 } from './data/quranData';
 import { QuranTopicCollection } from './data/topicsData';
 import {
-  ensureAudioCached,
   getCachedAudioSrc,
   isAudioCached,
   prefetchSurahAudio,
@@ -78,7 +77,6 @@ import {
   applyVoiceTimbreProfile,
   updateBackgroundMediaSession,
 } from './utils/useSmoothReadingPlayback';
-import { DUAS_AND_KALIMAS } from './data/duasAndKalimas';
 import { MobileBottomNav, TopNav } from './components/TopNav';
 import { SurahChips } from './components/SurahChips';
 import { SurahHeaderBanner } from './components/SurahHeaderBanner';
@@ -87,20 +85,25 @@ import { DailyGoalReminderToast } from './components/DailyGoalReminderToast';
 import { AyahCard } from './components/AyahCard';
 import { FloatingPlayerDeck } from './components/FloatingPlayerDeck';
 import { LexiconDrawer } from './components/LexiconDrawer';
-import { SettingsModal } from './components/SettingsModal';
-import { SurahIndexView } from './components/SurahIndexView';
-import { KhatmahPlannerView } from './components/KhatmahPlannerView';
-import { TopicsExplorerView } from './components/TopicsExplorerView';
-import { HifzQuizView } from './components/HifzQuizView';
-import { DuasKalimasView } from './components/DuasKalimasView';
-import { HadithsView } from './components/HadithsView';
-import { SalahView } from './components/SalahView';
-import { TajweedStudioView } from './components/TajweedStudioView';
-import { BookmarksView } from './components/BookmarksView';
-import { GoogleDriveView } from './components/GoogleDriveView';
-import { PdfExportModal } from './components/PdfExportModal';
-import { PdfExportScope } from './utils/pdfExport';
-import { NoorDriveBackupPayload } from './utils/googleDriveApi';
+import type { PdfExportScope } from './utils/pdfExport';
+import type { NoorDriveBackupPayload } from './utils/googleDriveApi';
+
+const SurahIndexView = lazy(() => import('./components/SurahIndexView').then((module) => ({ default: module.SurahIndexView })));
+const KhatmahPlannerView = lazy(() => import('./components/KhatmahPlannerView').then((module) => ({ default: module.KhatmahPlannerView })));
+const TopicsExplorerView = lazy(() => import('./components/TopicsExplorerView').then((module) => ({ default: module.TopicsExplorerView })));
+const HifzQuizView = lazy(() => import('./components/HifzQuizView').then((module) => ({ default: module.HifzQuizView })));
+const SalahView = lazy(() => import('./components/SalahView').then((module) => ({ default: module.SalahView })));
+const DuasKalimasView = lazy(() => import('./components/DuasKalimasView').then((module) => ({ default: module.DuasKalimasView })));
+const HadithsView = lazy(() => import('./components/HadithsView').then((module) => ({ default: module.HadithsView })));
+const TajweedStudioView = lazy(() => import('./components/TajweedStudioView').then((module) => ({ default: module.TajweedStudioView })));
+const BookmarksView = lazy(() => import('./components/BookmarksView').then((module) => ({ default: module.BookmarksView })));
+const GoogleDriveView = lazy(() => import('./components/GoogleDriveView').then((module) => ({ default: module.GoogleDriveView })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then((module) => ({ default: module.SettingsModal })));
+const PdfExportModal = lazy(() => import('./components/PdfExportModal').then((module) => ({ default: module.PdfExportModal })));
+
+function LoadingView() {
+  return <p role="status" className="p-6 text-center text-sm">Loading…</p>;
+}
 
 // Firebase is only needed for Google Drive sign-in, so it loads after the page settles (or when
 // someone signs in) instead of in the initial bundle.
@@ -3435,25 +3438,19 @@ export default function App() {
     }
   };
 
-  // Preload all local Qari audio assets and Kalima MP3s into CacheStorage cleanly (zero API calls)
+  // Warm worship recordings after entering a screen that uses them.
+  const isWorshipAudioScreen = activeScreen === 'duas' || activeScreen === 'salah' || activeScreen === 'hadiths';
   useEffect(() => {
+    if (!isWorshipAudioScreen) return;
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => {
       void prefetchAllLocalQariAudio(ctrl.signal);
-
-      const kalimaAndCoreUrls = DUAS_AND_KALIMAS.filter(
-        (d) => d.category === 'kalimas' && d.audioUrl
-      ).map((d) => d.audioUrl as string);
-
-      void Promise.all(
-        kalimaAndCoreUrls.map((url) => ensureAudioCached(url, ctrl.signal))
-      );
     }, 1200);
     return () => {
       window.clearTimeout(timer);
       ctrl.abort();
     };
-  }, []);
+  }, [isWorshipAudioScreen]);
 
   // Keep MediaSession metadata & WakeLock active so Qur'an Reading Mode works smoothly in background
   useEffect(() => {
@@ -3766,6 +3763,7 @@ export default function App() {
           </div>
         )}
 
+        <Suspense fallback={<LoadingView />}>
         {activeScreen === 'surahs' && (
           <SurahIndexView
             directory={SURAH_DIRECTORY}
@@ -4128,6 +4126,7 @@ export default function App() {
             onRestoreBackup={handleRestoreDriveBackup}
           />
         )}
+        </Suspense>
 
         <footer className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 pt-2 text-center">
           <p className="text-xs text-[#404944]/80 dark:text-emerald-200/60 tracking-wide">
@@ -4183,7 +4182,8 @@ export default function App() {
         }}
       />
 
-      <SettingsModal
+      <Suspense fallback={<LoadingView />}>
+      {isSettingsOpen && <SettingsModal
         isOpen={isSettingsOpen}
         settings={settings}
         darkMode={darkMode}
@@ -4205,9 +4205,9 @@ export default function App() {
           setActiveScreen('drive');
           mainScrollRef.current?.scrollTo({ top: 0 });
         }}
-      />
+      />}
 
-      <PdfExportModal
+      {pdfExportState.isOpen && <PdfExportModal
         isOpen={pdfExportState.isOpen}
         initialScope={pdfExportState.scope}
         surah={activeSurah}
@@ -4243,7 +4243,8 @@ export default function App() {
             isOpen: false,
           }))
         }
-      />
+      />}
+      </Suspense>
 
       <DailyGoalReminderToast
         isVisible={showDailyReminder && versesRecitedCount === 0}

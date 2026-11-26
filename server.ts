@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { AiCallBudget, createAiRequestLimits, positiveInteger, sameOriginOnly } from './server/aiProtection.ts';
 import { precompressedStatic, staticCacheHeaders } from './server/staticAssets.ts';
+import { translationContentKey } from './src/utils/translationCacheKey.ts';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -542,7 +543,7 @@ async function startServer() {
       const missing: Array<{ id: string; text: string; arabic?: string }> = [];
 
       for (const item of items) {
-        const key = `${targetLang}::${item.text.trim()}`;
+        const key = `${targetLang}::${translationContentKey(item.text, item.arabic)}`;
         const hit = translationCache.get(key);
         if (hit) {
           resolved[item.id] = hit;
@@ -559,7 +560,7 @@ async function startServer() {
         const promptPayload = missing.map((m) => ({
           id: m.id,
           source: m.text.trim(),
-          ...(m.arabic ? { arabicContext: m.arabic.trim() } : {}),
+          ...(m.arabic?.trim() ? { arabicContext: m.arabic.trim() } : {}),
         }));
 
         const response = await generateAiContent({
@@ -591,15 +592,13 @@ async function startServer() {
           translation?: string;
         }>;
 
-        const textById = new Map(missing.map((m) => [m.id, m.text.trim()]));
+        const itemById = new Map(missing.map((item) => [item.id, item]));
         for (const entry of parsed) {
-          if (entry?.id && typeof entry.translation === 'string' && entry.translation.trim()) {
+          const item = entry?.id === undefined ? undefined : itemById.get(entry.id);
+          if (item && typeof entry.translation === 'string' && entry.translation.trim()) {
             const clean = entry.translation.trim();
-            resolved[entry.id] = clean;
-            const orig = textById.get(entry.id);
-            if (orig) {
-              setCachedTranslation(`${targetLang}::${orig}`, clean);
-            }
+            resolved[item.id] = clean;
+            setCachedTranslation(`${targetLang}::${translationContentKey(item.text, item.arabic)}`, clean);
           }
         }
       }

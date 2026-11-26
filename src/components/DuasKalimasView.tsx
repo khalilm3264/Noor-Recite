@@ -137,6 +137,21 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
 }) => {
   const [activeCategory, setActiveCategory] = useState<DuaTab>('all');
   const [includeVariations, setIncludeVariations] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      for (const item of DUAS_AND_KALIMAS) {
+        if (item.category === 'kalimas' && item.audioUrl) {
+          void ensureAudioCached(item.audioUrl, controller.signal);
+        }
+      }
+    }, 1200);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, []);
+
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? '[]');
@@ -276,7 +291,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
           item.translationEn.toLowerCase().includes(q) ||
           item.translationHi.toLowerCase().includes(q) ||
           item.translationUr.toLowerCase().includes(q) ||
-          resolveDynamicText(item.translationEn).toLowerCase().includes(q) ||
+          resolveDynamicText(item.translationEn, item.arabic).toLowerCase().includes(q) ||
           item.reference.toLowerCase().includes(q);
         if (!primaryMatch) {
           const matchedAlt = item.alternates.find(
@@ -288,7 +303,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
               alt.translationEn.toLowerCase().includes(q) ||
               alt.translationHi.toLowerCase().includes(q) ||
               alt.translationUr.toLowerCase().includes(q) ||
-              resolveDynamicText(alt.translationEn).toLowerCase().includes(q) ||
+              resolveDynamicText(alt.translationEn, alt.arabic).toLowerCase().includes(q) ||
               alt.reference.toLowerCase().includes(q) ||
               (alt.note && alt.note.toLowerCase().includes(q))
           );
@@ -318,7 +333,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         item.translationEn.toLowerCase().includes(q) ||
         item.translationHi.toLowerCase().includes(q) ||
         item.translationUr.toLowerCase().includes(q) ||
-        resolveDynamicText(item.translationEn).toLowerCase().includes(q) ||
+        resolveDynamicText(item.translationEn, item.arabic).toLowerCase().includes(q) ||
         item.reference.toLowerCase().includes(q) ||
         item.note.toLowerCase().includes(q);
       if (primaryMatch) return true;
@@ -332,7 +347,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
             alt.translationEn.toLowerCase().includes(q) ||
             alt.translationHi.toLowerCase().includes(q) ||
             alt.translationUr.toLowerCase().includes(q) ||
-            resolveDynamicText(alt.translationEn).toLowerCase().includes(q) ||
+            resolveDynamicText(alt.translationEn, alt.arabic).toLowerCase().includes(q) ||
             alt.reference.toLowerCase().includes(q) ||
             (alt.note && alt.note.toLowerCase().includes(q))
         )
@@ -1253,7 +1268,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
         ? item.translationUr
         : activeLang === 'en'
         ? item.translationEn
-        : resolveDynamicText(item.translationEn);
+        : resolveDynamicText(item.translationEn, item.arabic);
     const text = `${item.title} (${item.reference})\n${item.arabic}\n${item.transliteration}\n${tr}`;
     try {
       await navigator.clipboard.writeText(text);
@@ -1554,7 +1569,7 @@ export const DuasKalimasView: React.FC<DuasKalimasViewProps> = ({
                 ? item.translationUr
                 : activeLang === 'en'
                 ? item.translationEn
-                : resolveDynamicText(item.translationEn);
+                : resolveDynamicText(item.translationEn, item.arabic);
 
             return (
               <article

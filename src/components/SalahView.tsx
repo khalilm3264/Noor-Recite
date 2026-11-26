@@ -1370,7 +1370,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
         ? special.translationUr
         : activeLang === 'en'
         ? special.translationEn
-        : resolveDynamicText(special.translationEn);
+        : resolveDynamicText(special.translationEn, special.arabic);
 
     return (
       <div
@@ -1748,7 +1748,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
                     ? guide.niyyahUr
                     : activeLang === 'en'
                     ? guide.niyyahEn
-                    : resolveDynamicText(guide.niyyahEn);
+                    : resolveDynamicText(guide.niyyahEn, guide.niyyahArabic);
                 const localizedSteps =
                   activeLang === 'hi'
                     ? guide.stepsHi
@@ -2081,7 +2081,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
                   ? step.translationUr
                   : activeLang === 'en'
                   ? step.translationEn
-                  : resolveDynamicText(step.translationEn);
+                  : resolveDynamicText(step.translationEn, step.arabic);
 
               return (
                 <article
@@ -2411,7 +2411,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
                           ? st.meaningUr
                           : activeLang === 'en'
                           ? st.meaningEn
-                          : resolveDynamicText(st.meaningEn)}
+                          : resolveDynamicText(st.meaningEn, st.arabic)}
                       </p>
                     </div>
 
@@ -2522,7 +2522,7 @@ export const SalahView: React.FC<SalahViewProps> = ({
                     ? wudu.detailUr
                     : activeLang === 'en'
                     ? wudu.detailEn
-                    : resolveDynamicText(wudu.detailEn);
+                    : resolveDynamicText(wudu.detailEn, wudu.arabic);
                 const wuduAudioId = `wudu-${wudu.stepNumber}`;
                 const isPlayingThis = activeAudioId === wuduAudioId && isPlaying;
                 const isBufferingThis =

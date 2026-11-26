@@ -288,7 +288,7 @@ export const TopicsExplorerView: React.FC<TopicsExplorerViewProps> = ({
       ? entry.translationUr
       : translationLanguage === 'en'
       ? entry.translationEn
-      : resolveDynamicText(entry.translationEn);
+      : resolveDynamicText(entry.translationEn, entry.arabic);
 
   // Detail View for Selected Topic
   if (selectedTopic) {
