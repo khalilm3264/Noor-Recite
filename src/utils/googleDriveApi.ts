@@ -61,11 +61,6 @@ export interface DriveAboutInfo {
   };
 }
 
-export interface DriveActivityEntry {
-  timestamp: string;
-  actionLabel: string;
-}
-
 export interface NoorDriveBackupPayload {
   app: 'Noor Recite';
   version: 1;
@@ -126,10 +121,8 @@ export async function fetchDriveAbout(token: string): Promise<DriveAboutInfo> {
 
 export type DriveListScope =
   | 'noor-folder'
-  | 'all'
   | 'docs'
   | 'media'
-  | 'appdata'
   | 'trashed';
 
 export interface ListDriveFilesOptions {
@@ -147,26 +140,20 @@ export async function listDriveFiles(
   token: string,
   options: ListDriveFilesOptions
 ): Promise<DriveFileItem[]> {
-  const clauses: string[] = [];
-  let spaces = 'drive';
+  if (!options.noorFolderId) return [];
 
-  if (options.scope === 'appdata') {
-    spaces = 'appDataFolder';
-  } else if (options.scope === 'trashed') {
-    clauses.push('trashed = true');
-  } else {
-    clauses.push('trashed = false');
-    if (options.scope === 'noor-folder' && options.noorFolderId) {
-      clauses.push(`'${escapeDriveQueryValue(options.noorFolderId)}' in parents`);
-    } else if (options.scope === 'docs') {
-      clauses.push(
-        `(mimeType = '${GOOGLE_DOC_MIME}' or mimeType = 'text/plain' or mimeType = 'text/markdown' or mimeType = 'application/json')`
-      );
-    } else if (options.scope === 'media') {
-      clauses.push(
-        `(mimeType = 'application/pdf' or mimeType contains 'audio/' or mimeType contains 'image/')`
-      );
-    }
+  const clauses = [
+    `'${escapeDriveQueryValue(options.noorFolderId)}' in parents`,
+    `trashed = ${options.scope === 'trashed'}`,
+  ];
+  if (options.scope === 'docs') {
+    clauses.push(
+      `(mimeType = '${GOOGLE_DOC_MIME}' or mimeType = 'text/plain' or mimeType = 'text/markdown' or mimeType = 'application/json')`
+    );
+  } else if (options.scope === 'media') {
+    clauses.push(
+      `(mimeType = 'application/pdf' or mimeType contains 'audio/' or mimeType contains 'image/')`
+    );
   }
 
   const qTrim = options.searchQuery?.trim();
@@ -175,14 +162,12 @@ export async function listDriveFiles(
   }
 
   const params = new URLSearchParams({
-    spaces,
+    spaces: 'drive',
     pageSize: String(options.pageSize ?? 50),
     orderBy: 'folder,modifiedTime desc',
     fields: `files(${FILE_FIELDS})`,
   });
-  if (clauses.length > 0) {
-    params.set('q', clauses.join(' and '));
-  }
+  params.set('q', clauses.join(' and '));
 
   const res = await driveFetch(
     token,
@@ -231,9 +216,9 @@ export async function listNoorBackupFiles(
   token: string,
   noorFolderId?: string | null
 ): Promise<DriveFileItem[]> {
-  const parentClause = noorFolderId
-    ? `('${escapeDriveQueryValue(noorFolderId)}' in parents or name contains 'noor-recite-backup')`
-    : `name contains 'noor-recite-backup'`;
+  if (!noorFolderId) return [];
+
+  const parentClause = `'${escapeDriveQueryValue(noorFolderId)}' in parents`;
   const params = new URLSearchParams({
     spaces: 'drive',
     pageSize: '25',
@@ -461,54 +446,6 @@ export async function downloadDriveFileBlob(
     blob: await res.blob(),
     downloadName: file.name,
   };
-}
-
-export async function fetchDriveFileActivity(
-  token: string,
-  fileId: string
-): Promise<DriveActivityEntry[]> {
-  try {
-    const res = await driveFetch(
-      token,
-      'https://www.googleapis.com/driveactivity/v2/activity:query',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itemName: `items/${fileId}`,
-          pageSize: 6,
-        }),
-      }
-    );
-    const data = (await res.json()) as {
-      activities?: Array<{
-        timestamp?: string;
-        timeRange?: { endTime?: string };
-        primaryActionDetail?: Record<string, unknown>;
-      }>;
-    };
-    return (data.activities ?? []).map((act) => {
-      const ts = act.timestamp || act.timeRange?.endTime || '';
-      const keys = Object.keys(act.primaryActionDetail ?? {});
-      const rawAction = keys[0] || 'activity';
-      const actionMap: Record<string, string> = {
-        create: 'Created in Drive',
-        edit: 'Edited content',
-        rename: 'Renamed file',
-        move: 'Moved folder',
-        delete: 'Moved to trash',
-        restore: 'Restored from trash',
-        comment: 'Commented',
-      };
-      return {
-        timestamp: ts,
-        actionLabel: actionMap[rawAction] || `Updated (${rawAction})`,
-      };
-    });
-  } catch {
-    // Gracefully return empty if Drive Activity API is disabled or has no activity
-    return [];
-  }
 }
 
 export function buildStudyJournalMarkdown(payload: NoorDriveBackupPayload): string {

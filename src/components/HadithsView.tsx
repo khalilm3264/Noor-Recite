@@ -216,7 +216,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         item.translationEn.toLowerCase().includes(q) ||
         item.translationHi.toLowerCase().includes(q) ||
         item.translationUr.toLowerCase().includes(q) ||
-        resolveDynamicText(item.translationEn).toLowerCase().includes(q) ||
+        resolveDynamicText(item.translationEn, item.arabic).toLowerCase().includes(q) ||
         item.lessonEn.toLowerCase().includes(q)
       );
     });
@@ -717,7 +717,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
         ? item.translationUr
         : activeLang === 'en'
         ? item.translationEn
-        : resolveDynamicText(item.translationEn);
+        : resolveDynamicText(item.translationEn, item.arabic);
     const text = `${item.title}\n${item.narrator}\n${item.arabic}\n${item.transliteration}\n${tr}\n(${item.reference}, ${item.grading})`;
     try {
       await navigator.clipboard.writeText(text);
@@ -1002,7 +1002,7 @@ export const HadithsView: React.FC<HadithsViewProps> = ({
                 ? item.translationUr
                 : activeLang === 'en'
                 ? item.translationEn
-                : resolveDynamicText(item.translationEn);
+                : resolveDynamicText(item.translationEn, item.arabic);
             const localizedLesson =
               activeLang === 'hi'
                 ? item.lessonHi
